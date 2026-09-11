@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MyFn.Application/MyFn.Application.csproj" />
+    <Project Path="src/MyFn.Domain/MyFn.Domain.csproj" />
+    <Project Path="src/MyFn.Infrastructure/MyFn.Infrastructure.csproj" />
+    <Project Path="src/MyFn.Web/MyFn.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MyFn.Tests/MyFn.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,186 @@
+@page "/despesas"
+@inject IExpenseService ExpenseService
+@inject ICategoryService Categories
+@inject ICreditCardService Cards
+@inject IExportService Export
+@inject IJSRuntime JS
+
+<PageTitle>Despesas</PageTitle>
+<div class="fn-page-head">
+    <div>
+        <div class="fn-kicker">Lançamentos à vista</div>
+        <h1>Despesas</h1>
+    </div>
+    <div class="fn-toolbar">
+        <button class="btn-ghost" @onclick="ExportCsv">Exportar CSV</button>
+        <button class="btn-fn" @onclick="NewItem">+ Nova despesa</button>
+    </div>
+</div>
+<p class="text-muted">Compras parceladas não entram aqui: use o formulário rápido com cartão e número de parcelas, ou a tela Parcelamentos.</p>
+@if (errors.Count > 0) { <div class="alert alert-danger">@string.Join(" ", errors)</div> }
+@if (!string.IsNullOrEmpty(info)) { <div class="alert alert-success">@info</div> }
+
+<div class="fn-card">
+    <table class="table fn-table">
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Pagamento</th><th>Tipo</th><th class="text-end">Valor</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var item in items)
+        {
+            <tr>
+                <td>@Br.Date(item.Date)</td>
+                <td>@item.Description</td>
+                <td>@item.CategoryName</td>
+                <td>@Labels.Payment(item.PaymentMethod)</td>
+                <td>@Labels.Kind(item.Kind)</td>
+                <td class="text-end">@Br.Money(item.Amount)</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-link" @onclick="() => Edit(item)">Editar</button>
+                    <button class="btn btn-sm btn-link text-danger" @onclick="() => AskDelete(item)">Excluir</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<ModalFrame @bind-Visible="open" Title="Despesa">
+    <div class="row g-2">
+        <div class="col-12"><label class="form-label">Descrição</label><InputText class="form-control" @bind-Value="quick.Description" /></div>
+        <div class="col-md-6"><label class="form-label">Valor</label><InputNumber class="form-control" @bind-Value="quick.Amount" /></div>
+        <div class="col-md-6"><label class="form-label">Data</label><InputDate class="form-control" @bind-Value="quick.Date" /></div>
+        <div class="col-md-6">
+            <label class="form-label">Categoria</label>
+            <InputSelect class="form-select" @bind-Value="quick.CategoryId">
+                @foreach (var c in cats) { <option value="@c.Id">@c.Name</option> }
+            </InputSelect>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Pagamento</label>
+            <InputSelect class="form-select" @bind-Value="quick.PaymentMethod">
+                <option value="@PaymentMethod.Pix">PIX</option>
+                <option value="@PaymentMethod.Debit">Débito</option>
+                <option value="@PaymentMethod.Cash">Dinheiro</option>
+                <option value="@PaymentMethod.CreditCard">Cartão de crédito</option>
+            </InputSelect>
+        </div>
+        @if (quick.PaymentMethod == PaymentMethod.CreditCard)
+        {
+            <div class="col-md-6">
+                <label class="form-label">Cartão</label>
+                <InputSelect class="form-select" @bind-Value="quick.CreditCardId">
+                    <option value="">Selecione</option>
+                    @foreach (var c in cards) { <option value="@c.Id">@c.Name</option> }
+                </InputSelect>
+            </div>
+            <div class="col-md-3"><label class="form-label">Parcelas</label><InputNumber class="form-control" @bind-Value="quick.InstallmentCount" /></div>
+            <div class="col-md-3"><label class="form-label">Parcela atual</label><InputNumber class="form-control" @bind-Value="quick.CurrentInstallment" /></div>
+        }
+        <div class="col-12"><label class="form-label">Observação</label><InputTextArea class="form-control" @bind-Value="quick.Notes" /></div>
+    </div>
+    <div class="d-flex justify-content-end gap-2 mt-3">
+        <button type="button" class="btn-ghost" @onclick="() => open = false">Cancelar</button>
+        <button type="button" class="btn-fn" @onclick="Save">Salvar</button>
+    </div>
+</ModalFrame>
+
+<ConfirmDialog @bind-Visible="confirm" Title="Excluir despesa" ConfirmText="Excluir" OnConfirm="Delete">
+    Excluir "@pending?.Description"?
+</ConfirmDialog>
+
+@code {
+    private List<ExpenseDto> items = [];
+    private List<CategoryDto> cats = [];
+    private List<CreditCardDto> cards = [];
+    private QuickExpenseRequest quick = new();
+    private ExpenseDto? pending;
+    private bool open, confirm, editing;
+    private Guid editingId;
+    private List<string> errors = [];
+    private string? info;
+
+    protected override async Task OnInitializedAsync()
+    {
+        cats = (await Categories.ListAsync(CategoryType.Expense, true)).ToList();
+        cards = (await Cards.ListAsync()).Where(c => c.IsActive).ToList();
+        items = (await ExpenseService.ListAsync()).ToList();
+    }
+
+    private void NewItem()
+    {
+        editing = false;
+        quick = new QuickExpenseRequest
+        {
+            Date = DateOnly.FromDateTime(DateTime.Today),
+            PaymentMethod = PaymentMethod.Pix,
+            InstallmentCount = 1,
+            CurrentInstallment = 1,
+            CategoryId = cats.FirstOrDefault()?.Id
+        };
+        open = true;
+    }
+
+    private void Edit(ExpenseDto item)
+    {
+        editing = true;
+        editingId = item.Id;
+        quick = new QuickExpenseRequest
+        {
+            Description = item.Description,
+            Amount = item.Amount,
+            Date = item.Date,
+            CategoryId = item.CategoryId,
+            PaymentMethod = item.PaymentMethod,
+            CreditCardId = item.CreditCardId,
+            Notes = item.Notes,
+            InstallmentCount = 1,
+            CurrentInstallment = 1
+        };
+        open = true;
+    }
+
+    private async Task Save()
+    {
+        errors.Clear();
+        info = null;
+        try
+        {
+            if (editing)
+            {
+                await ExpenseService.SaveAsync(new ExpenseDto
+                {
+                    Id = editingId,
+                    Description = quick.Description,
+                    Amount = quick.Amount,
+                    Date = quick.Date,
+                    CategoryId = quick.CategoryId ?? Guid.Empty,
+                    PaymentMethod = quick.PaymentMethod,
+                    CreditCardId = quick.CreditCardId,
+                    Notes = quick.Notes
+                });
+                info = "Despesa atualizada.";
+            }
+            else
+            {
+                var result = await ExpenseService.CreateQuickAsync(quick);
+                info = result.Message;
+            }
+            items = (await ExpenseService.ListAsync()).ToList();
+            open = false;
+        }
+        catch (FinanceValidationException ex) { errors = ex.Errors.ToList(); }
+    }
+
+    private void AskDelete(ExpenseDto item) { pending = item; confirm = true; }
+    private async Task Delete()
+    {
+        if (pending is null) return;
+        await ExpenseService.DeleteAsync(pending.Id);
+        items = (await ExpenseService.ListAsync()).ToList();
+    }
+
+    private async Task ExportCsv()
+    {
+        var bytes = await Export.ExportExpensesCsvAsync();
+        await JS.InvokeVoidAsync("downloadFile", "despesas.csv", "text/csv", Convert.ToBase64String(bytes));
+    }
+}

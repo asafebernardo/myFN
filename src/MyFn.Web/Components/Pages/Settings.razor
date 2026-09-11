@@ -1,0 +1,117 @@
+@page "/configuracoes"
+@inject ISettingsService SettingsService
+@inject IImportService Import
+@inject IExportService Export
+@inject IJSRuntime JS
+
+<PageTitle>Configurações</PageTitle>
+<div class="fn-page-head">
+    <div>
+        <div class="fn-kicker">Preferências</div>
+        <h1>Configurações</h1>
+    </div>
+</div>
+@if (errors.Count > 0) { <div class="alert alert-danger">@string.Join(" ", errors)</div> }
+@if (!string.IsNullOrEmpty(info)) { <div class="alert alert-success">@info</div> }
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="fn-card">
+            <h2 class="h5">Financeiro</h2>
+            <div class="row g-2">
+                <div class="col-md-6"><label class="form-label">Salário padrão</label><InputNumber class="form-control" @bind-Value="form.DefaultSalary" /></div>
+                <div class="col-md-6"><label class="form-label">Moeda</label><InputText class="form-control" @bind-Value="form.CurrencyCode" /></div>
+                <div class="col-md-6"><label class="form-label">Primeiro dia do mês financeiro</label><InputNumber class="form-control" @bind-Value="form.FinancialMonthStartDay" /></div>
+                <div class="col-md-6"><label class="form-label">Saudável até (%)</label><InputNumber class="form-control" @bind-Value="form.HealthyCommitmentMaxPercent" /></div>
+                <div class="col-md-6"><label class="form-label">Atenção até (%)</label><InputNumber class="form-control" @bind-Value="form.WarningCommitmentMaxPercent" /></div>
+                <div class="col-12"><label class="form-check"><InputCheckbox class="form-check-input" @bind-Value="form.ShowDashboardCharts" /> Exibir gráficos no dashboard</label></div>
+            </div>
+            <button class="btn-fn mt-3" @onclick="Save">Salvar configurações</button>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="fn-card">
+            <h2 class="h5">Importar planilha (.xlsx)</h2>
+            <p class="text-muted">A importação não apaga dados existentes. Duplicatas (descrição + valor + data) são ignoradas.</p>
+            <InputFile OnChange="OnFile" accept=".xlsx" />
+            @if (headers.Count > 0)
+            {
+                <div class="row g-2 mt-2">
+                    <div class="col-md-6"><label class="form-label">Coluna descrição</label><InputSelect class="form-select" @bind-Value="map.Description">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
+                    <div class="col-md-6"><label class="form-label">Coluna valor</label><InputSelect class="form-select" @bind-Value="map.Amount">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
+                    <div class="col-md-6"><label class="form-label">Coluna data</label><InputSelect class="form-select" @bind-Value="map.Date">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
+                    <div class="col-md-6"><label class="form-label">Coluna tipo</label><InputSelect class="form-select" @bind-Value="map.Type">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
+                </div>
+                <button class="btn-ghost mt-2" @onclick="Preview">Prévia</button>
+            }
+            @if (preview.Count > 0)
+            {
+                <table class="table fn-table mt-3">
+                    <thead><tr><th>Linha</th><th>Descrição</th><th>Valor</th><th>Alerta</th></tr></thead>
+                    <tbody>
+                    @foreach (var row in preview.Take(30))
+                    {
+                        <tr>
+                            <td>@row.Line</td>
+                            <td>@row.Description</td>
+                            <td>@Br.Money(row.Amount)</td>
+                            <td>@(row.PossibleDuplicate ? row.Warning : "")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+                <button class="btn-fn" @onclick="DoImport">Importar linhas novas</button>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private SettingsDto form = new();
+    private ImportColumnMap map = new();
+    private List<string> headers = [];
+    private List<ImportPreviewRow> preview = [];
+    private byte[]? fileBytes;
+    private List<string> errors = [];
+    private string? info;
+
+    protected override async Task OnInitializedAsync() => form = await SettingsService.GetAsync();
+
+    private async Task Save()
+    {
+        await SettingsService.SaveAsync(form);
+        info = "Configurações salvas.";
+    }
+
+    private async Task OnFile(InputFileChangeEventArgs e)
+    {
+        using var stream = e.File.OpenReadStream(10 * 1024 * 1024);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        fileBytes = ms.ToArray();
+        using var read = new MemoryStream(fileBytes);
+        headers = (await Import.ReadHeadersAsync(read)).ToList();
+        if (headers.Count > 0)
+        {
+            map.Description = headers.FirstOrDefault(h => h.Contains("desc", StringComparison.OrdinalIgnoreCase)) ?? headers[0];
+            map.Amount = headers.FirstOrDefault(h => h.Contains("valor", StringComparison.OrdinalIgnoreCase)) ?? headers[0];
+            map.Date = headers.FirstOrDefault(h => h.Contains("data", StringComparison.OrdinalIgnoreCase)) ?? headers[0];
+            map.Type = headers.FirstOrDefault(h => h.Contains("tipo", StringComparison.OrdinalIgnoreCase)) ?? headers[0];
+        }
+    }
+
+    private async Task Preview()
+    {
+        if (fileBytes is null) return;
+        using var ms = new MemoryStream(fileBytes);
+        preview = (await Import.PreviewAsync(ms, map)).ToList();
+    }
+
+    private async Task DoImport()
+    {
+        if (fileBytes is null) return;
+        using var ms = new MemoryStream(fileBytes);
+        var count = await Import.ImportAsync(ms, map);
+        info = $"{count} linha(s) importadas. Duplicatas foram ignoradas.";
+    }
+}

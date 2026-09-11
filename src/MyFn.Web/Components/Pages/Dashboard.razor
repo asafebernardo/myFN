@@ -1,0 +1,287 @@
+@page "/"
+@inject IFinancialSummaryService Summary
+@inject IExpenseService Expenses
+@inject ICategoryService Categories
+@inject ICreditCardService Cards
+@inject ISettingsService SettingsSvc
+
+<PageTitle>Dashboard</PageTitle>
+
+<div class="fn-page-head">
+    <div>
+        <div class="fn-kicker">Visão do mês</div>
+        <h1>Dashboard</h1>
+    </div>
+    <div class="fn-toolbar">
+        <div>
+            <label class="form-label mb-0 small">Mês</label>
+            <input type="month" class="form-control" value="@MonthInput" @onchange="OnMonthChanged" />
+        </div>
+        <button class="btn-fn" @onclick="OpenQuick">+ Nova despesa</button>
+    </div>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (data is null)
+{
+    <p>Carregando...</p>
+}
+else
+{
+    var s = data.Summary;
+    var tone = Tone(s.CommitmentLevel);
+
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-lg-3"><div class="fn-card"><div class="fn-kicker">Salário / Entradas</div><div class="fn-metric pos">@Br.Money(s.Income)</div></div></div>
+        <div class="col-6 col-lg-3"><div class="fn-card"><div class="fn-kicker">Despesas obrigatórias</div><div class="fn-metric">@Br.Money(s.MandatoryExpenses)</div><small>@Br.Percent(s.MandatoryPercentOfIncome) da renda</small></div></div>
+        <div class="col-6 col-lg-3"><div class="fn-card"><div class="fn-kicker">Débitos</div><div class="fn-metric">@Br.Money(s.Debits)</div></div></div>
+        <div class="col-6 col-lg-3"><div class="fn-card"><div class="fn-kicker">Créditos à vista</div><div class="fn-metric">@Br.Money(s.CashCredit)</div></div></div>
+        <div class="col-6 col-lg-3"><div class="fn-card"><div class="fn-kicker">Compras parceladas</div><div class="fn-metric">@Br.Money(s.Installments)</div></div></div>
+        <div class="col-6 col-lg-3"><div class="fn-card @tone"><div class="fn-kicker">Total comprometido</div><div class="fn-metric">@Br.Money(s.TotalExpenses)</div></div></div>
+        <div class="col-6 col-lg-3"><div class="fn-card @tone"><div class="fn-kicker">Saldo disponível</div><div class="fn-metric @(s.Balance < 0 ? "neg" : "pos")">@Br.Money(s.Balance)</div></div></div>
+        <div class="col-6 col-lg-3">
+            <div class="fn-card @tone">
+                <div class="fn-kicker">Renda comprometida</div>
+                <div class="fn-metric">@Br.Percent(s.CommitmentPercent)</div>
+                <StatusBadge Text="@Labels.Commitment(s.CommitmentLevel)" Tone="@tone" />
+            </div>
+        </div>
+    </div>
+
+    @if (showCharts)
+    {
+        <div class="row g-3 mb-3">
+            <div class="col-lg-4"><div class="fn-card"><h2 class="h6">Despesas por categoria</h2><ChartCanvas CanvasId="catChart" Config="@categoryChart" /></div></div>
+            <div class="col-lg-4"><div class="fn-card"><h2 class="h6">Evolução mensal</h2><ChartCanvas CanvasId="evoChart" Config="@evolutionChart" /></div></div>
+            <div class="col-lg-4"><div class="fn-card"><h2 class="h6">Comprometimento da renda</h2><ChartCanvas CanvasId="commitChart" Config="@commitChart" /></div></div>
+        </div>
+    }
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="fn-card">
+                <h2 class="h6">Maiores despesas do mês</h2>
+                <table class="table fn-table">
+                    <thead><tr><th>Descrição</th><th>Tipo</th><th class="text-end">Valor</th></tr></thead>
+                    <tbody>
+                    @foreach (var item in data.TopExpenses)
+                    {
+                        <tr>
+                            <td>@item.Name</td>
+                            <td>@item.Detail</td>
+                            <td class="text-end">@Br.Money(item.Amount)</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="fn-card">
+                <h2 class="h6">Parcelamentos que vão terminar</h2>
+                @if (data.EndingSoon.Count == 0)
+                {
+                    <p class="text-muted mb-0">Nenhum parcelamento próximo do fim.</p>
+                }
+                else
+                {
+                    <table class="table fn-table">
+                        <thead><tr><th>Compra</th><th>Fim</th><th class="text-end">Parcela</th></tr></thead>
+                        <tbody>
+                        @foreach (var item in data.EndingSoon)
+                        {
+                            <tr>
+                                <td>@item.PurchaseDescription</td>
+                                <td>@Br.Date(item.DueDate)</td>
+                                <td class="text-end">@Br.Money(item.Amount)</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<ModalFrame @bind-Visible="quickOpen" Title="Nova despesa">
+    <EditForm Model="quick" OnValidSubmit="SaveQuick">
+        @if (formErrors.Count > 0)
+        {
+            <div class="alert alert-danger">
+                @foreach (var e in formErrors) { <div>@e</div> }
+            </div>
+        }
+        <div class="row g-2">
+            <div class="col-12"><label class="form-label">Descrição</label><InputText class="form-control" @bind-Value="quick.Description" /></div>
+            <div class="col-md-6"><label class="form-label">Valor</label><InputNumber class="form-control" @bind-Value="quick.Amount" /></div>
+            <div class="col-md-6"><label class="form-label">Data</label><InputDate class="form-control" @bind-Value="quick.Date" /></div>
+            <div class="col-md-6">
+                <label class="form-label">Pagamento</label>
+                <InputSelect class="form-select" @bind-Value="quick.PaymentMethod">
+                    <option value="@PaymentMethod.Pix">PIX</option>
+                    <option value="@PaymentMethod.Debit">Débito</option>
+                    <option value="@PaymentMethod.Cash">Dinheiro</option>
+                    <option value="@PaymentMethod.CreditCard">Cartão de crédito</option>
+                </InputSelect>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Categoria</label>
+                <InputSelect class="form-select" @bind-Value="quick.CategoryId">
+                    @foreach (var c in expenseCats) { <option value="@c.Id">@c.Name</option> }
+                </InputSelect>
+            </div>
+            @if (quick.PaymentMethod == PaymentMethod.CreditCard)
+            {
+                <div class="col-md-6">
+                    <label class="form-label">Cartão</label>
+                    <InputSelect class="form-select" @bind-Value="quick.CreditCardId">
+                        <option value="">Selecione</option>
+                        @foreach (var c in cards) { <option value="@c.Id">@c.Name</option> }
+                    </InputSelect>
+                </div>
+                <div class="col-md-3"><label class="form-label">Parcelas</label><InputNumber class="form-control" @bind-Value="quick.InstallmentCount" /></div>
+                <div class="col-md-3"><label class="form-label">Parcela atual</label><InputNumber class="form-control" @bind-Value="quick.CurrentInstallment" /></div>
+            }
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+            <button type="button" class="btn-ghost" @onclick="() => quickOpen = false">Cancelar</button>
+            <button type="submit" class="btn-fn">Salvar</button>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(success))
+        {
+            <div class="alert alert-success mt-3 mb-0">@success</div>
+        }
+    </EditForm>
+</ModalFrame>
+
+@code {
+    private DashboardDto? data;
+    private int year = DateTime.Today.Year;
+    private int month = DateTime.Today.Month;
+    private bool showCharts = true;
+    private object? categoryChart, evolutionChart, commitChart;
+    private bool quickOpen;
+    private QuickExpenseRequest quick = NewQuick();
+    private List<CategoryDto> expenseCats = [];
+    private List<CreditCardDto> cards = [];
+    private List<string> formErrors = [];
+    private string? error;
+    private string? success;
+    private string MonthInput => $"{year:0000}-{month:00}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var settings = await SettingsSvc.GetAsync();
+        showCharts = settings.ShowDashboardCharts;
+        expenseCats = (await Categories.ListAsync(CategoryType.Expense, true)).ToList();
+        cards = (await Cards.ListAsync()).Where(c => c.IsActive).ToList();
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        data = await Summary.GetDashboardAsync(year, month);
+        BuildCharts();
+    }
+
+    private async Task OnMonthChanged(ChangeEventArgs e)
+    {
+        Br.ParseMonth(e.Value?.ToString(), ref year, ref month);
+        await Reload();
+    }
+
+    private void OpenQuick()
+    {
+        quick = NewQuick();
+        if (expenseCats.Count > 0) quick.CategoryId = expenseCats[0].Id;
+        formErrors.Clear();
+        success = null;
+        quickOpen = true;
+    }
+
+    private async Task SaveQuick()
+    {
+        formErrors.Clear();
+        success = null;
+        try
+        {
+            var result = await Expenses.CreateQuickAsync(quick);
+            success = result.Message;
+            await Reload();
+            quickOpen = false;
+        }
+        catch (FinanceValidationException ex)
+        {
+            formErrors = ex.Errors.ToList();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private static QuickExpenseRequest NewQuick() => new()
+    {
+        Date = DateOnly.FromDateTime(DateTime.Today),
+        InstallmentCount = 1,
+        CurrentInstallment = 1,
+        PaymentMethod = PaymentMethod.Pix
+    };
+
+    private static string Tone(CommitmentLevel level) => level switch
+    {
+        CommitmentLevel.Healthy => "ok",
+        CommitmentLevel.Warning => "warn",
+        _ => "bad"
+    };
+
+    private void BuildCharts()
+    {
+        if (data is null) return;
+        categoryChart = new
+        {
+            type = "doughnut",
+            data = new
+            {
+                labels = data.ExpensesByCategory.Select(x => x.Name).ToArray(),
+                datasets = new[]
+                {
+                    new { data = data.ExpensesByCategory.Select(x => x.Amount).ToArray(), backgroundColor = data.ExpensesByCategory.Select(x => x.Color).ToArray() }
+                }
+            },
+            options = new { plugins = new { legend = new { position = "bottom" } } }
+        };
+        evolutionChart = new
+        {
+            type = "bar",
+            data = new
+            {
+                labels = data.Evolution.Select(x => x.Month.ShortLabel).ToArray(),
+                datasets = new object[]
+                {
+                    new { label = "Entradas", data = data.Evolution.Select(x => x.Income).ToArray(), backgroundColor = "#1f8a57" },
+                    new { label = "Despesas", data = data.Evolution.Select(x => x.TotalExpenses).ToArray(), backgroundColor = "#c44536" }
+                }
+            },
+            options = new { plugins = new { legend = new { position = "bottom" } } }
+        };
+        commitChart = new
+        {
+            type = "line",
+            data = new
+            {
+                labels = data.Evolution.Select(x => x.Month.ShortLabel).ToArray(),
+                datasets = new[]
+                {
+                    new { label = "% comprometido", data = data.Evolution.Select(x => x.CommitmentPercent).ToArray(), borderColor = "#c6a15b", tension = 0.3 }
+                }
+            },
+            options = new { plugins = new { legend = new { position = "bottom" } } }
+        };
+    }
+}

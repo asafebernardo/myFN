@@ -1,0 +1,39 @@
+﻿@inherits LayoutComponentBase
+
+<div class="fn-shell">
+    <aside class="fn-sidebar @(navOpen ? "open" : null)">
+        <NavMenu OnNavigate="CloseNav" />
+    </aside>
+    @if (navOpen)
+    {
+        <div class="fn-sidebar-backdrop" @onclick="CloseNav"></div>
+    }
+    <div class="fn-main">
+        <header class="fn-topbar">
+            <button class="fn-menu-btn" type="button" @onclick="ToggleNav" aria-label="Abrir menu">
+                <i class="bi bi-list"></i>
+            </button>
+            <div>
+                <div class="fn-brand-mobile">myFN</div>
+                <div class="fn-topbar-sub">Controle financeiro pessoal</div>
+            </div>
+            <div class="fn-topbar-meta">BRL · pt-BR</div>
+        </header>
+        <article class="fn-content">
+            @Body
+        </article>
+    </div>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Ocorreu um erro inesperado.
+    <a href="." class="reload">Recarregar</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private bool navOpen;
+
+    private void ToggleNav() => navOpen = !navOpen;
+    private void CloseNav() => navOpen = false;
+}

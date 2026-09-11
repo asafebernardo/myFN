@@ -1,0 +1,135 @@
+@page "/compras-planejadas"
+@inject IPlannedPurchaseService PlannedService
+@inject ICategoryService Categories
+
+<PageTitle>Compras planejadas</PageTitle>
+<div class="fn-page-head">
+    <div>
+        <div class="fn-kicker">Lista de desejos</div>
+        <h1>Compras planejadas</h1>
+    </div>
+    <button class="btn-fn" @onclick="NewItem">+ Nova compra</button>
+</div>
+@if (errors.Count > 0) { <div class="alert alert-danger">@string.Join(" ", errors)</div> }
+
+<div class="fn-card">
+    <table class="table fn-table">
+        <thead><tr><th>Descrição</th><th>Prioridade</th><th>Status</th><th>Posso comprar?</th><th class="text-end">Valor</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var item in items)
+        {
+            <tr>
+                <td>
+                    @item.Description
+                    @if (item.DesiredDate is DateOnly d) { <div class="small text-muted">@Br.Date(d)</div> }
+                </td>
+                <td>@Labels.Priority(item.Priority)</td>
+                <td>@Labels.Planned(item.Status)</td>
+                <td>
+                    @if (item.Affordability is not null)
+                    {
+                        <StatusBadge Text="@Labels.Affordability(item.Affordability.Level)" Tone="@(item.Affordability.Level == AffordabilityLevel.Recommended ? "ok" : item.Affordability.Level == AffordabilityLevel.Caution ? "warn" : "bad")" />
+                        <div class="small text-muted">@string.Join(" ", item.Affordability.Reasons)</div>
+                    }
+                </td>
+                <td class="text-end">@Br.Money(item.EstimatedAmount)</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-link" @onclick="() => Edit(item)">Editar</button>
+                    <button class="btn btn-sm btn-link text-danger" @onclick="() => AskDelete(item)">Excluir</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<ModalFrame @bind-Visible="open" Title="Compra planejada">
+    <div class="row g-2">
+        <div class="col-12"><label class="form-label">Descrição</label><InputText class="form-control" @bind-Value="form.Description" /></div>
+        <div class="col-md-6"><label class="form-label">Valor estimado</label><InputNumber class="form-control" @bind-Value="form.EstimatedAmount" /></div>
+        <div class="col-md-6">
+            <label class="form-label">Prioridade</label>
+            <InputSelect class="form-select" @bind-Value="form.Priority">
+                <option value="@PriorityLevel.High">Alta</option>
+                <option value="@PriorityLevel.Medium">Média</option>
+                <option value="@PriorityLevel.Low">Baixa</option>
+            </InputSelect>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Categoria</label>
+            <InputSelect class="form-select" @bind-Value="form.CategoryId">
+                <option value="">Opcional</option>
+                @foreach (var c in cats) { <option value="@c.Id">@c.Name</option> }
+            </InputSelect>
+        </div>
+        <div class="col-md-6"><label class="form-label">Data desejada</label><InputDate class="form-control" @bind-Value="form.DesiredDate" /></div>
+        <div class="col-md-6">
+            <label class="form-label">Status</label>
+            <InputSelect class="form-select" @bind-Value="form.Status">
+                <option value="@PlannedPurchaseStatus.Planned">Planejada</option>
+                <option value="@PlannedPurchaseStatus.Purchased">Comprada</option>
+                <option value="@PlannedPurchaseStatus.Cancelled">Cancelada</option>
+            </InputSelect>
+        </div>
+        <div class="col-12"><label class="form-label">Observação</label><InputTextArea class="form-control" @bind-Value="form.Notes" /></div>
+    </div>
+    <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-ghost" @onclick="() => open = false">Cancelar</button>
+        <button class="btn-fn" @onclick="Save">Salvar</button>
+    </div>
+</ModalFrame>
+
+<ConfirmDialog @bind-Visible="confirm" Title="Excluir compra planejada" ConfirmText="Excluir" OnConfirm="Delete">
+    Excluir "@pending?.Description"?
+</ConfirmDialog>
+
+@code {
+    private List<PlannedPurchaseDto> items = [];
+    private List<CategoryDto> cats = [];
+    private PlannedPurchaseDto form = new();
+    private PlannedPurchaseDto? pending;
+    private bool open, confirm;
+    private List<string> errors = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        cats = (await Categories.ListAsync(CategoryType.Expense, true)).ToList();
+        items = (await PlannedService.ListAsync()).ToList();
+    }
+
+    private void NewItem()
+    {
+        form = new PlannedPurchaseDto { Priority = PriorityLevel.Medium, Status = PlannedPurchaseStatus.Planned, DesiredDate = DateOnly.FromDateTime(DateTime.Today) };
+        open = true;
+    }
+
+    private void Edit(PlannedPurchaseDto item)
+    {
+        form = new PlannedPurchaseDto
+        {
+            Id = item.Id, Description = item.Description, EstimatedAmount = item.EstimatedAmount, Priority = item.Priority,
+            CategoryId = item.CategoryId, DesiredDate = item.DesiredDate, Notes = item.Notes, Status = item.Status
+        };
+        open = true;
+    }
+
+    private async Task Save()
+    {
+        errors.Clear();
+        try
+        {
+            await PlannedService.SaveAsync(form);
+            items = (await PlannedService.ListAsync()).ToList();
+            open = false;
+        }
+        catch (FinanceValidationException ex) { errors = ex.Errors.ToList(); }
+    }
+
+    private void AskDelete(PlannedPurchaseDto item) { pending = item; confirm = true; }
+    private async Task Delete()
+    {
+        if (pending is null) return;
+        await PlannedService.DeleteAsync(pending.Id);
+        items = (await PlannedService.ListAsync()).ToList();
+    }
+}

@@ -1,0 +1,98 @@
+@page "/categorias"
+@inject ICategoryService CategoryService
+
+<PageTitle>Categorias</PageTitle>
+<div class="fn-page-head">
+    <div>
+        <div class="fn-kicker">Cadastros</div>
+        <h1>Categorias</h1>
+    </div>
+    <button class="btn-fn" @onclick="NewItem">+ Nova categoria</button>
+</div>
+@if (errors.Count > 0) { <div class="alert alert-danger">@string.Join(" ", errors)</div> }
+
+<div class="fn-card">
+    <table class="table fn-table">
+        <thead><tr><th>Nome</th><th>Tipo</th><th>Cor</th><th>Ativa</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var item in items)
+        {
+            <tr>
+                <td><span class="fn-dot me-2" style="background:@item.Color"></span>@item.Name</td>
+                <td>@Labels.Type(item.Type)</td>
+                <td>@item.Color</td>
+                <td>@(item.IsActive ? "Sim" : "Não")</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-link" @onclick="() => Edit(item)">Editar</button>
+                    <button class="btn btn-sm btn-link text-danger" @onclick="() => AskDelete(item)">Excluir</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<ModalFrame @bind-Visible="open" Title="Categoria">
+    <div class="row g-2">
+        <div class="col-md-6"><label class="form-label">Nome</label><InputText class="form-control" @bind-Value="form.Name" /></div>
+        <div class="col-md-4">
+            <label class="form-label">Tipo</label>
+            <InputSelect class="form-select" @bind-Value="form.Type">
+                <option value="@CategoryType.Expense">Despesa</option>
+                <option value="@CategoryType.Income">Entrada</option>
+            </InputSelect>
+        </div>
+        <div class="col-md-2"><label class="form-label">Cor</label><InputText type="color" class="form-control form-control-color" @bind-Value="form.Color" /></div>
+        <div class="col-12"><label class="form-check"><InputCheckbox class="form-check-input" @bind-Value="form.IsActive" /> Ativa</label></div>
+    </div>
+    <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-ghost" @onclick="() => open = false">Cancelar</button>
+        <button class="btn-fn" @onclick="Save">Salvar</button>
+    </div>
+</ModalFrame>
+
+<ConfirmDialog @bind-Visible="confirm" Title="Excluir categoria" ConfirmText="Excluir" OnConfirm="Delete">
+    Excluir "@pending?.Name"? Se estiver em uso, ela será apenas desativada.
+</ConfirmDialog>
+
+@code {
+    private List<CategoryDto> items = [];
+    private CategoryDto form = new() { IsActive = true, Color = "#1b7a4e", Type = CategoryType.Expense };
+    private CategoryDto? pending;
+    private bool open, confirm;
+    private List<string> errors = [];
+
+    protected override async Task OnInitializedAsync() => items = (await CategoryService.ListAsync()).ToList();
+
+    private void NewItem()
+    {
+        form = new CategoryDto { IsActive = true, Color = "#1b7a4e", Type = CategoryType.Expense };
+        open = true;
+    }
+
+    private void Edit(CategoryDto item)
+    {
+        form = new CategoryDto { Id = item.Id, Name = item.Name, Type = item.Type, Color = item.Color, IsActive = item.IsActive };
+        open = true;
+    }
+
+    private async Task Save()
+    {
+        errors.Clear();
+        try
+        {
+            await CategoryService.SaveAsync(form);
+            items = (await CategoryService.ListAsync()).ToList();
+            open = false;
+        }
+        catch (FinanceValidationException ex) { errors = ex.Errors.ToList(); }
+    }
+
+    private void AskDelete(CategoryDto item) { pending = item; confirm = true; }
+    private async Task Delete()
+    {
+        if (pending is null) return;
+        await CategoryService.DeleteAsync(pending.Id);
+        items = (await CategoryService.ListAsync()).ToList();
+    }
+}

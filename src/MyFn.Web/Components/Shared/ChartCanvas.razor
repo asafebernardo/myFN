@@ -1,0 +1,17 @@
+@namespace MyFn.Web.Components.Shared
+@inject IJSRuntime JS
+
+<canvas id="@CanvasId" height="220"></canvas>
+
+@code {
+    [Parameter] public string CanvasId { get; set; } = "chart";
+    [Parameter] public object? Config { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Config is not null)
+        {
+            await JS.InvokeVoidAsync("charts.render", CanvasId, Config);
+        }
+    }
+}

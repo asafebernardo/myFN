@@ -1,0 +1,171 @@
+@page "/recorrentes"
+@inject IRecurringExpenseService RecurringService
+@inject ICategoryService Categories
+@inject ICreditCardService Cards
+
+<PageTitle>Recorrentes</PageTitle>
+<div class="fn-page-head">
+    <div>
+        <div class="fn-kicker">Mensais</div>
+        <h1>Despesas recorrentes</h1>
+    </div>
+    <button class="btn-fn" @onclick="NewItem">+ Nova recorrente</button>
+</div>
+
+<div class="fn-toolbar mb-3">
+    <button class="btn-ghost @(filter is null ? "btn-fn" : "")" @onclick="() => Filter(null)">Todas</button>
+    <button class="btn-ghost @(filter == true ? "btn-fn" : "")" @onclick="() => Filter(true)">Obrigatórias</button>
+    <button class="btn-ghost @(filter == false ? "btn-fn" : "")" @onclick="() => Filter(false)">Outras</button>
+</div>
+
+@if (items.Count > 0)
+{
+    <div class="fn-card mb-3">
+        <strong>Total @(filter == true ? "obrigatórias" : "listado"):</strong> @Br.Money(items.Where(i => i.IsActive).Sum(i => i.Amount))
+        @if (items.Any(i => i.IsMandatory && i.IsActive))
+        {
+            <span class="ms-2">comprometimento médio da maior: @Br.Percent(items.Where(i => i.IsMandatory).Max(i => i.PercentOfIncome))</span>
+        }
+    </div>
+}
+
+@if (errors.Count > 0) { <div class="alert alert-danger">@string.Join(" ", errors)</div> }
+
+<div class="fn-card">
+    <table class="table fn-table">
+        <thead><tr><th>Descrição</th><th>Tipo</th><th>Pagamento</th><th>% renda</th><th>Término</th><th class="text-end">Valor</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var item in items)
+        {
+            <tr>
+                <td>
+                    @item.Description
+                    @if (!string.IsNullOrWhiteSpace(item.WhatIsIt)) { <div class="small text-muted">@item.WhatIsIt</div> }
+                    @if (!string.IsNullOrWhiteSpace(item.Prdv)) { <div class="small">PRDV: @item.Prdv</div> }
+                </td>
+                <td>@(item.IsMandatory ? "Obrigatória" : "Recorrente")</td>
+                <td>@Labels.Payment(item.PaymentMethod)</td>
+                <td>@Br.Percent(item.PercentOfIncome)</td>
+                <td>@(item.EndDate is DateOnly d ? Br.Date(d) : "Indefinido")</td>
+                <td class="text-end">@Br.Money(item.Amount)</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-link" @onclick="() => Edit(item)">Editar</button>
+                    <button class="btn btn-sm btn-link text-danger" @onclick="() => AskDelete(item)">Excluir</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<ModalFrame @bind-Visible="open" Title="Despesa recorrente">
+    <div class="row g-2">
+        <div class="col-12"><label class="form-label">Descrição</label><InputText class="form-control" @bind-Value="form.Description" /></div>
+        <div class="col-md-6"><label class="form-label">Valor</label><InputNumber class="form-control" @bind-Value="form.Amount" /></div>
+        <div class="col-md-6">
+            <label class="form-label">Categoria</label>
+            <InputSelect class="form-select" @bind-Value="form.CategoryId">
+                @foreach (var c in cats) { <option value="@c.Id">@c.Name</option> }
+            </InputSelect>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Pagamento</label>
+            <InputSelect class="form-select" @bind-Value="form.PaymentMethod">
+                <option value="@PaymentMethod.Pix">PIX</option>
+                <option value="@PaymentMethod.Debit">Débito</option>
+                <option value="@PaymentMethod.Cash">Dinheiro</option>
+                <option value="@PaymentMethod.CreditCard">Cartão de crédito</option>
+            </InputSelect>
+        </div>
+        @if (form.PaymentMethod == PaymentMethod.CreditCard)
+        {
+            <div class="col-md-6">
+                <label class="form-label">Cartão</label>
+                <InputSelect class="form-select" @bind-Value="form.CreditCardId">
+                    @foreach (var c in cards) { <option value="@c.Id">@c.Name</option> }
+                </InputSelect>
+            </div>
+        }
+        <div class="col-md-6"><label class="form-label">Início</label><InputDate class="form-control" @bind-Value="form.StartDate" /></div>
+        <div class="col-md-6"><label class="form-label">Previsão de término</label><InputDate class="form-control" @bind-Value="form.EndDate" /></div>
+        <div class="col-md-6"><label class="form-label">O que é?</label><InputText class="form-control" @bind-Value="form.WhatIsIt" /></div>
+        <div class="col-md-6"><label class="form-label">PRDV</label><InputText class="form-control" @bind-Value="form.Prdv" /></div>
+        <div class="col-12"><label class="form-check"><InputCheckbox class="form-check-input" @bind-Value="form.IsMandatory" /> Despesa obrigatória</label></div>
+        <div class="col-12"><label class="form-check"><InputCheckbox class="form-check-input" @bind-Value="form.IsActive" /> Ativa</label></div>
+        <div class="col-12"><label class="form-label">Observação</label><InputTextArea class="form-control" @bind-Value="form.Notes" /></div>
+    </div>
+    <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-ghost" @onclick="() => open = false">Cancelar</button>
+        <button class="btn-fn" @onclick="Save">Salvar</button>
+    </div>
+</ModalFrame>
+
+<ConfirmDialog @bind-Visible="confirm" Title="Excluir recorrente" ConfirmText="Excluir" OnConfirm="Delete">
+    Excluir "@pending?.Description"?
+</ConfirmDialog>
+
+@code {
+    private List<RecurringExpenseDto> items = [];
+    private List<CategoryDto> cats = [];
+    private List<CreditCardDto> cards = [];
+    private RecurringExpenseDto form = new();
+    private RecurringExpenseDto? pending;
+    private bool? filter;
+    private bool open, confirm;
+    private List<string> errors = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        cats = (await Categories.ListAsync(CategoryType.Expense, true)).ToList();
+        cards = (await Cards.ListAsync()).Where(c => c.IsActive).ToList();
+        await Load();
+    }
+
+    private async Task Load() => items = (await RecurringService.ListAsync(filter)).ToList();
+    private async Task Filter(bool? value) { filter = value; await Load(); }
+
+    private void NewItem()
+    {
+        form = new RecurringExpenseDto
+        {
+            StartDate = DateOnly.FromDateTime(DateTime.Today),
+            CategoryId = cats.FirstOrDefault()?.Id ?? Guid.Empty,
+            PaymentMethod = PaymentMethod.Pix,
+            IsActive = true,
+            IsMandatory = filter == true
+        };
+        open = true;
+    }
+
+    private void Edit(RecurringExpenseDto item)
+    {
+        form = new RecurringExpenseDto
+        {
+            Id = item.Id, Description = item.Description, Amount = item.Amount, CategoryId = item.CategoryId,
+            PaymentMethod = item.PaymentMethod, CreditCardId = item.CreditCardId, IsMandatory = item.IsMandatory,
+            IsActive = item.IsActive, StartDate = item.StartDate, EndDate = item.EndDate, WhatIsIt = item.WhatIsIt,
+            Prdv = item.Prdv, Notes = item.Notes
+        };
+        open = true;
+    }
+
+    private async Task Save()
+    {
+        errors.Clear();
+        try
+        {
+            await RecurringService.SaveAsync(form);
+            await Load();
+            open = false;
+        }
+        catch (FinanceValidationException ex) { errors = ex.Errors.ToList(); }
+    }
+
+    private void AskDelete(RecurringExpenseDto item) { pending = item; confirm = true; }
+    private async Task Delete()
+    {
+        if (pending is null) return;
+        await RecurringService.DeleteAsync(pending.Id);
+        await Load();
+    }
+}

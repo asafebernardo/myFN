@@ -1,0 +1,52 @@
+﻿<div class="fn-brand">
+    <span class="fn-logo">R$</span>
+    <div>
+        <strong>myFN</strong>
+        <small>Finanças pessoais</small>
+    </div>
+</div>
+
+<nav class="fn-nav">
+    <NavLink class="fn-link" href="" Match="NavLinkMatch.All" @onclick="Navigate">
+        <i class="bi bi-speedometer2"></i> Dashboard
+    </NavLink>
+    <NavLink class="fn-link" href="lancamentos" @onclick="Navigate">
+        <i class="bi bi-journal-text"></i> Lançamentos
+    </NavLink>
+    <NavLink class="fn-link" href="entradas" @onclick="Navigate">
+        <i class="bi bi-box-arrow-in-down"></i> Entradas
+    </NavLink>
+    <NavLink class="fn-link" href="despesas" @onclick="Navigate">
+        <i class="bi bi-receipt"></i> Despesas
+    </NavLink>
+    <NavLink class="fn-link" href="parcelamentos" @onclick="Navigate">
+        <i class="bi bi-calendar2-week"></i> Parcelamentos
+    </NavLink>
+    <NavLink class="fn-link" href="cartoes" @onclick="Navigate">
+        <i class="bi bi-credit-card"></i> Cartões
+    </NavLink>
+    <NavLink class="fn-link" href="recorrentes" @onclick="Navigate">
+        <i class="bi bi-arrow-repeat"></i> Recorrentes
+    </NavLink>
+    <NavLink class="fn-link" href="projecao" @onclick="Navigate">
+        <i class="bi bi-graph-up"></i> Projeção
+    </NavLink>
+    <NavLink class="fn-link" href="compras-planejadas" @onclick="Navigate">
+        <i class="bi bi-bag-check"></i> Compras planejadas
+    </NavLink>
+    <NavLink class="fn-link" href="relatorios" @onclick="Navigate">
+        <i class="bi bi-bar-chart"></i> Relatórios
+    </NavLink>
+    <NavLink class="fn-link" href="categorias" @onclick="Navigate">
+        <i class="bi bi-tags"></i> Categorias
+    </NavLink>
+    <NavLink class="fn-link" href="configuracoes" @onclick="Navigate">
+        <i class="bi bi-gear"></i> Configurações
+    </NavLink>
+</nav>
+
+@code {
+    [Parameter] public EventCallback OnNavigate { get; set; }
+
+    private Task Navigate() => OnNavigate.InvokeAsync();
+}

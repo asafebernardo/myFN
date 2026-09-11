@@ -1,0 +1,157 @@
+@page "/parcelamentos"
+@inject IInstallmentService InstallmentService
+@inject ICreditCardService Cards
+@inject ICategoryService Categories
+@inject IExportService Export
+@inject IJSRuntime JS
+
+<PageTitle>Parcelamentos</PageTitle>
+<div class="fn-page-head">
+    <div>
+        <div class="fn-kicker">Compras no crédito</div>
+        <h1>Parcelamentos</h1>
+    </div>
+    <div class="fn-toolbar">
+        <button class="btn-ghost" @onclick="ExportCsv">Exportar CSV</button>
+        <button class="btn-fn" @onclick="NewItem">+ Nova compra</button>
+    </div>
+</div>
+@if (errors.Count > 0) { <div class="alert alert-danger">@string.Join(" ", errors)</div> }
+
+@foreach (var p in purchases)
+{
+    <div class="fn-card mb-3">
+        <div class="d-flex justify-content-between flex-wrap gap-2">
+            <div>
+                <h2 class="h5 mb-1">@p.Description</h2>
+                <div class="text-muted">@p.CreditCardName · @p.CurrentInstallment/@p.InstallmentCount · compra em @Br.Date(p.PurchaseDate)</div>
+            </div>
+            <div class="text-end">
+                <div>Total @Br.Money(p.TotalAmount)</div>
+                <div>Restante @Br.Money(p.RemainingAmount)</div>
+                @if (p.LastDueDate is DateOnly last) { <small>Termina em @Br.Date(last)</small> }
+            </div>
+        </div>
+        <table class="table fn-table mt-2">
+            <thead><tr><th>Parcela</th><th>Vencimento</th><th>Status</th><th class="text-end">Valor</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var i in p.Installments)
+            {
+                <tr>
+                    <td>@i.Number de @i.InstallmentCount</td>
+                    <td>@Br.Date(i.DueDate)</td>
+                    <td><StatusBadge Text="@Labels.Status(i.Status)" Tone="@(i.Status == InstallmentStatus.Paid ? "ok" : i.Status == InstallmentStatus.Overdue ? "bad" : "neutral")" /></td>
+                    <td class="text-end">@Br.Money(i.Amount)</td>
+                    <td class="text-end">
+                        @if (i.Status != InstallmentStatus.Paid)
+                        {
+                            <button class="btn btn-sm btn-link" @onclick="() => SetStatus(i.Id, InstallmentStatus.Paid)">Marcar paga</button>
+                        }
+                        @if (i.Status != InstallmentStatus.Cancelled)
+                        {
+                            <button class="btn btn-sm btn-link" @onclick="() => SetStatus(i.Id, InstallmentStatus.Cancelled)">Cancelar</button>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        <button class="btn btn-sm btn-outline-danger" @onclick="() => AskDelete(p)">Excluir compra</button>
+    </div>
+}
+
+<ModalFrame @bind-Visible="open" Title="Compra parcelada">
+    <div class="row g-2">
+        <div class="col-12"><label class="form-label">Descrição</label><InputText class="form-control" @bind-Value="form.Description" /></div>
+        <div class="col-md-6"><label class="form-label">Valor total</label><InputNumber class="form-control" @bind-Value="form.TotalAmount" /></div>
+        <div class="col-md-3"><label class="form-label">Parcelas</label><InputNumber class="form-control" @bind-Value="form.InstallmentCount" /></div>
+        <div class="col-md-3"><label class="form-label">Parcela atual</label><InputNumber class="form-control" @bind-Value="form.CurrentInstallment" /></div>
+        <div class="col-md-6">
+            <label class="form-label">Cartão</label>
+            <InputSelect class="form-select" @bind-Value="form.CreditCardId">
+                @foreach (var c in cards) { <option value="@c.Id">@c.Name</option> }
+            </InputSelect>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">Categoria</label>
+            <InputSelect class="form-select" @bind-Value="form.CategoryId">
+                <option value="">Opcional</option>
+                @foreach (var c in cats) { <option value="@c.Id">@c.Name</option> }
+            </InputSelect>
+        </div>
+        <div class="col-md-6"><label class="form-label">Data da compra</label><InputDate class="form-control" @bind-Value="form.PurchaseDate" /></div>
+        <div class="col-md-6"><label class="form-label">Data da 1ª parcela</label><InputDate class="form-control" @bind-Value="form.FirstInstallmentDate" /></div>
+        <div class="col-12"><label class="form-label">Observação</label><InputTextArea class="form-control" @bind-Value="form.Notes" /></div>
+    </div>
+    <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-ghost" @onclick="() => open = false">Cancelar</button>
+        <button class="btn-fn" @onclick="Save">Salvar</button>
+    </div>
+</ModalFrame>
+
+<ConfirmDialog @bind-Visible="confirm" Title="Excluir compra" ConfirmText="Excluir" OnConfirm="Delete">
+    Excluir "@pending?.Description" e todas as parcelas geradas?
+</ConfirmDialog>
+
+@code {
+    private List<InstallmentPurchaseDto> purchases = [];
+    private List<CreditCardDto> cards = [];
+    private List<CategoryDto> cats = [];
+    private InstallmentPurchaseDto form = new();
+    private InstallmentPurchaseDto? pending;
+    private bool open, confirm;
+    private List<string> errors = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        cards = (await Cards.ListAsync()).Where(c => c.IsActive).ToList();
+        cats = (await Categories.ListAsync(CategoryType.Expense, true)).ToList();
+        purchases = (await InstallmentService.ListPurchasesAsync()).ToList();
+    }
+
+    private void NewItem()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        form = new InstallmentPurchaseDto
+        {
+            PurchaseDate = today,
+            FirstInstallmentDate = today,
+            InstallmentCount = 12,
+            CurrentInstallment = 1,
+            CreditCardId = cards.FirstOrDefault()?.Id ?? Guid.Empty
+        };
+        open = true;
+    }
+
+    private async Task Save()
+    {
+        errors.Clear();
+        try
+        {
+            await InstallmentService.CreateAsync(form);
+            purchases = (await InstallmentService.ListPurchasesAsync()).ToList();
+            open = false;
+        }
+        catch (FinanceValidationException ex) { errors = ex.Errors.ToList(); }
+    }
+
+    private async Task SetStatus(Guid id, InstallmentStatus status)
+    {
+        await InstallmentService.SetInstallmentStatusAsync(id, status);
+        purchases = (await InstallmentService.ListPurchasesAsync()).ToList();
+    }
+
+    private void AskDelete(InstallmentPurchaseDto item) { pending = item; confirm = true; }
+    private async Task Delete()
+    {
+        if (pending is null) return;
+        await InstallmentService.DeletePurchaseAsync(pending.Id);
+        purchases = (await InstallmentService.ListPurchasesAsync()).ToList();
+    }
+
+    private async Task ExportCsv()
+    {
+        var bytes = await Export.ExportInstallmentsCsvAsync();
+        await JS.InvokeVoidAsync("downloadFile", "parcelas.csv", "text/csv", Convert.ToBase64String(bytes));
+    }
+}

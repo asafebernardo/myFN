@@ -1,0 +1,181 @@
+@page "/relatorios"
+@inject IReportService ReportService
+@inject ICategoryService Categories
+@inject ICreditCardService Cards
+@inject IExportService Export
+@inject IJSRuntime JS
+
+<PageTitle>Relatórios</PageTitle>
+<div class="fn-page-head">
+    <div>
+        <div class="fn-kicker">Análises</div>
+        <h1>Relatórios</h1>
+    </div>
+    <button class="btn-fn" @onclick="ExportExcel">Exportar Excel</button>
+</div>
+
+<div class="fn-card mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-3"><label class="form-label">De</label><InputDate class="form-control" @bind-Value="filter.From" /></div>
+        <div class="col-md-3"><label class="form-label">Até</label><InputDate class="form-control" @bind-Value="filter.To" /></div>
+        <div class="col-md-3">
+            <label class="form-label">Categoria</label>
+            <InputSelect class="form-select" @bind-Value="filter.CategoryId">
+                <option value="">Todas</option>
+                @foreach (var c in cats) { <option value="@c.Id">@c.Name</option> }
+            </InputSelect>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Cartão</label>
+            <InputSelect class="form-select" @bind-Value="filter.CreditCardId">
+                <option value="">Todos</option>
+                @foreach (var c in cards) { <option value="@c.Id">@c.Name</option> }
+            </InputSelect>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Tipo de despesa</label>
+            <InputSelect class="form-select" @bind-Value="kindFilter">
+                <option value="">Todos</option>
+                <option value="Debit">Débito</option>
+                <option value="CreditCash">Crédito à vista</option>
+            </InputSelect>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Status parcela</label>
+            <InputSelect class="form-select" @bind-Value="statusFilter">
+                <option value="">Todos</option>
+                <option value="Open">Aberta</option>
+                <option value="Paid">Paga</option>
+                <option value="Overdue">Atrasada</option>
+            </InputSelect>
+        </div>
+        <div class="col-md-3"><button class="btn-fn" @onclick="Load">Filtrar</button></div>
+    </div>
+</div>
+
+@if (bundle is not null)
+{
+    <div class="row g-3">
+        <div class="col-lg-6"><div class="fn-card"><h2 class="h6">Gastos por categoria</h2><ChartCanvas CanvasId="repCat" Config="@catChart" /></div></div>
+        <div class="col-lg-6"><div class="fn-card"><h2 class="h6">Evolução do saldo</h2><ChartCanvas CanvasId="repBal" Config="@balChart" /></div></div>
+        <div class="col-12">
+            <div class="fn-card">
+                <h2 class="h6">Gastos por mês</h2>
+                <table class="table fn-table">
+                    <thead><tr><th>Mês</th><th>Entradas</th><th>Obrigatórias</th><th>Total despesas</th><th>Saldo</th><th>%</th></tr></thead>
+                    <tbody>
+                    @foreach (var m in bundle.ByMonth)
+                    {
+                        <tr>
+                            <td>@m.Month.Label</td>
+                            <td>@Br.Money(m.Income)</td>
+                            <td>@Br.Money(m.MandatoryExpenses)</td>
+                            <td>@Br.Money(m.TotalExpenses)</td>
+                            <td>@Br.Money(m.Balance)</td>
+                            <td>@Br.Percent(m.CommitmentPercent)</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="fn-card">
+                <h2 class="h6">Parcelamentos futuros</h2>
+                <table class="table fn-table">
+                    @foreach (var i in bundle.FutureInstallments.Take(20))
+                    {
+                        <tr><td>@i.PurchaseDescription (@i.Number/@i.InstallmentCount)</td><td>@Br.Date(i.DueDate)</td><td class="text-end">@Br.Money(i.Amount)</td></tr>
+                    }
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="fn-card">
+                <h2 class="h6">Despesas recorrentes</h2>
+                <table class="table fn-table">
+                    @foreach (var r in bundle.Recurring)
+                    {
+                        <tr><td>@r.Description</td><td>@(r.IsMandatory ? "Obrigatória" : "Recorrente")</td><td class="text-end">@Br.Money(r.Amount)</td></tr>
+                    }
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="fn-card">
+                <h2 class="h6">Cartões</h2>
+                @foreach (var c in bundle.Cards)
+                {
+                    <div class="d-flex justify-content-between"><span>@c.Name</span><span>disp. @Br.Money(c.AvailableLimit)</span></div>
+                }
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="fn-card">
+                <h2 class="h6">Compras planejadas</h2>
+                @foreach (var p in bundle.Planned)
+                {
+                    <div class="d-flex justify-content-between"><span>@p.Description</span><span>@Br.Money(p.EstimatedAmount)</span></div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private ReportFilter filter = new()
+    {
+        From = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1),
+        To = DateOnly.FromDateTime(DateTime.Today)
+    };
+    private ReportBundle? bundle;
+    private List<CategoryDto> cats = [];
+    private List<CreditCardDto> cards = [];
+    private string kindFilter = "";
+    private string statusFilter = "";
+    private object? catChart, balChart;
+
+    protected override async Task OnInitializedAsync()
+    {
+        cats = (await Categories.ListAsync(CategoryType.Expense, true)).ToList();
+        cards = (await Cards.ListAsync()).ToList();
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        filter.ExpenseKind = kindFilter switch { "Debit" => ExpenseKind.Debit, "CreditCash" => ExpenseKind.CreditCash, _ => null };
+        filter.InstallmentStatus = statusFilter switch
+        {
+            "Open" => InstallmentStatus.Open,
+            "Paid" => InstallmentStatus.Paid,
+            "Overdue" => InstallmentStatus.Overdue,
+            _ => null
+        };
+        bundle = await ReportService.GetAsync(filter);
+        catChart = new
+        {
+            type = "bar",
+            data = new
+            {
+                labels = bundle.ByCategory.Select(x => x.Name).ToArray(),
+                datasets = new[] { new { data = bundle.ByCategory.Select(x => x.Amount).ToArray(), backgroundColor = bundle.ByCategory.Select(x => x.Color).ToArray() } }
+            }
+        };
+        balChart = new
+        {
+            type = "line",
+            data = new
+            {
+                labels = bundle.BalanceEvolution.Select(x => x.Name).ToArray(),
+                datasets = new[] { new { label = "Saldo", data = bundle.BalanceEvolution.Select(x => x.Amount).ToArray(), borderColor = "#1f8a57" } }
+            }
+        };
+    }
+
+    private async Task ExportExcel()
+    {
+        var bytes = await Export.ExportReportExcelAsync(filter);
+        await JS.InvokeVoidAsync("downloadFile", "relatorio.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
+}

@@ -1,0 +1,73 @@
+@page "/projecao"
+@inject IProjectionService ProjectionService
+@inject IExportService Export
+@inject IJSRuntime JS
+
+<PageTitle>Projeção</PageTitle>
+<div class="fn-page-head">
+    <div>
+        <div class="fn-kicker">Meses futuros</div>
+        <h1>Projeção financeira</h1>
+    </div>
+    <div class="fn-toolbar">
+        <div>
+            <label class="form-label mb-0 small">Início</label>
+            <input type="month" class="form-control" value="@MonthInput" @onchange="OnMonthChanged" />
+        </div>
+        <div>
+            <label class="form-label mb-0 small">Meses</label>
+            <InputNumber class="form-control" @bind-Value="months" />
+        </div>
+        <button class="btn-ghost" @onclick="Load">Atualizar</button>
+        <button class="btn-fn" @onclick="ExportExcel">Exportar Excel</button>
+    </div>
+</div>
+
+<div class="row g-3">
+    @foreach (var m in items)
+    {
+        <div class="col-md-6 col-xl-4">
+            <div class="fn-card @Tone(m.CommitmentLevel)">
+                <h2 class="h5 text-uppercase">@m.Month.Label</h2>
+                <div class="d-flex justify-content-between"><span>Entradas</span><strong class="pos">+@Br.Money(m.Income)</strong></div>
+                <div class="d-flex justify-content-between"><span>Despesas obrigatórias</span><span>-@Br.Money(m.MandatoryExpenses)</span></div>
+                <div class="d-flex justify-content-between"><span>Parcelamentos</span><span>-@Br.Money(m.Installments)</span></div>
+                <div class="d-flex justify-content-between"><span>Débitos</span><span>-@Br.Money(m.Debits)</span></div>
+                <div class="d-flex justify-content-between"><span>Créditos à vista</span><span>-@Br.Money(m.CashCredit)</span></div>
+                <hr />
+                <div class="d-flex justify-content-between"><span>Total de despesas</span><strong>@Br.Money(m.TotalExpenses)</strong></div>
+                <div class="d-flex justify-content-between"><span>Saldo projetado</span><strong class="@(m.Balance < 0 ? "neg" : "pos")">@Br.Money(m.Balance)</strong></div>
+                <small>@Br.Percent(m.CommitmentPercent) comprometido · @Labels.Commitment(m.CommitmentLevel)</small>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private int year = DateTime.Today.Year, month = DateTime.Today.Month, months = 6;
+    private IReadOnlyList<MonthlySummary> items = [];
+    private string MonthInput => $"{year:0000}-{month:00}";
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Load() => items = await ProjectionService.ProjectAsync(year, month, months);
+
+    private async Task OnMonthChanged(ChangeEventArgs e)
+    {
+        Br.ParseMonth(e.Value?.ToString(), ref year, ref month);
+        await Load();
+    }
+
+    private async Task ExportExcel()
+    {
+        var bytes = await Export.ExportProjectionExcelAsync(year, month, months);
+        await JS.InvokeVoidAsync("downloadFile", "projecao.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
+
+    private static string Tone(CommitmentLevel level) => level switch
+    {
+        CommitmentLevel.Healthy => "ok",
+        CommitmentLevel.Warning => "warn",
+        _ => "bad"
+    };
+}

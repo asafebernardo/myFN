@@ -1,0 +1,9 @@
+@namespace MyFn.Web.Components.Shared
+
+<span class="fn-badge @Css">@Text</span>
+
+@code {
+    [Parameter] public string Text { get; set; } = "";
+    [Parameter] public string Tone { get; set; } = "neutral";
+    private string Css => Tone;
+}

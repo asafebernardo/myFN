@@ -1,0 +1,74 @@
+@page "/lancamentos"
+@inject IFinancialSummaryService Summary
+@inject IExportService Export
+@inject IJSRuntime JS
+
+<PageTitle>Lançamentos</PageTitle>
+<div class="fn-page-head">
+    <div>
+        <div class="fn-kicker">Resumo calculado</div>
+        <h1>Lançamentos</h1>
+    </div>
+    <div class="fn-toolbar">
+        <input type="month" class="form-control" value="@MonthInput" @onchange="OnMonthChanged" />
+        <button class="btn-ghost" @onclick="ExportExcel">Exportar Excel</button>
+    </div>
+</div>
+
+@if (summary is not null)
+{
+    <div class="row g-3 mb-3">
+        <div class="col-md"><div class="fn-card"><div class="fn-kicker">Entradas</div><div class="fn-metric pos">@Br.Money(summary.Income)</div></div></div>
+        <div class="col-md"><div class="fn-card"><div class="fn-kicker">Débitos</div><div class="fn-metric">@Br.Money(summary.Debits)</div></div></div>
+        <div class="col-md"><div class="fn-card"><div class="fn-kicker">Créditos à vista</div><div class="fn-metric">@Br.Money(summary.CashCredit)</div></div></div>
+        <div class="col-md"><div class="fn-card"><div class="fn-kicker">Parcelados</div><div class="fn-metric">@Br.Money(summary.Installments)</div></div></div>
+        <div class="col-md"><div class="fn-card"><div class="fn-kicker">Total do mês</div><div class="fn-metric">@Br.Money(summary.TotalExpenses)</div></div></div>
+        <div class="col-md"><div class="fn-card"><div class="fn-kicker">Saldo</div><div class="fn-metric @(summary.Balance < 0 ? "neg" : "pos")">@Br.Money(summary.Balance)</div></div></div>
+    </div>
+}
+
+<div class="fn-card">
+    <table class="table fn-table">
+        <thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Categoria</th><th class="text-end">Valor</th></tr></thead>
+        <tbody>
+        @foreach (var item in ledger)
+        {
+            <tr>
+                <td>@Br.Date(item.Date)</td>
+                <td>@item.Kind</td>
+                <td>@item.Description</td>
+                <td>@item.Category</td>
+                <td class="text-end @(item.Amount < 0 ? "neg" : "pos")">@Br.Money(item.Amount)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private int year = DateTime.Today.Year, month = DateTime.Today.Month;
+    private MonthlySummary? summary;
+    private IReadOnlyList<LedgerEntryDto> ledger = [];
+    private string MonthInput => $"{year:0000}-{month:00}";
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Load()
+    {
+        summary = await Summary.GetMonthAsync(year, month);
+        ledger = await Summary.GetLedgerAsync(year, month);
+    }
+
+    private async Task OnMonthChanged(ChangeEventArgs e)
+    {
+        Br.ParseMonth(e.Value?.ToString(), ref year, ref month);
+        await Load();
+    }
+
+    private async Task ExportExcel()
+    {
+        var bytes = await Export.ExportLedgerExcelAsync(year, month);
+        await JS.InvokeVoidAsync("downloadFile", $"lancamentos-{year}-{month:00}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+    }
+
+}
