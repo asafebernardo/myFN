@@ -13,9 +13,9 @@
 </div>
 
 <div class="fn-toolbar mb-3">
-    <button class="btn-ghost @(filter is null ? "btn-fn" : "")" @onclick="() => Filter(null)">Todas</button>
-    <button class="btn-ghost @(filter == true ? "btn-fn" : "")" @onclick="() => Filter(true)">Obrigatórias</button>
-    <button class="btn-ghost @(filter == false ? "btn-fn" : "")" @onclick="() => Filter(false)">Outras</button>
+    <button class="@(filter is null ? "btn-fn" : "btn-ghost")" @onclick="() => Filter(null)">Todas</button>
+    <button class="@(filter == true ? "btn-fn" : "btn-ghost")" @onclick="() => Filter(true)">Obrigatórias</button>
+    <button class="@(filter == false ? "btn-fn" : "btn-ghost")" @onclick="() => Filter(false)">Outras</button>
 </div>
 
 @if (items.Count > 0)

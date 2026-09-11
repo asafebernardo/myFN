@@ -159,8 +159,9 @@
             data = new
             {
                 labels = bundle.ByCategory.Select(x => x.Name).ToArray(),
-                datasets = new[] { new { data = bundle.ByCategory.Select(x => x.Amount).ToArray(), backgroundColor = bundle.ByCategory.Select(x => x.Color).ToArray() } }
-            }
+                datasets = new[] { new { label = "Gastos", data = bundle.ByCategory.Select(x => x.Amount).ToArray(), backgroundColor = bundle.ByCategory.Select(x => x.Color).ToArray() } }
+            },
+            options = new { plugins = new { legend = new { display = false } } }
         };
         balChart = new
         {
