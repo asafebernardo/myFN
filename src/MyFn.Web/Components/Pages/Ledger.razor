@@ -1,19 +1,29 @@
 @page "/lancamentos"
+@page "/movimentacoes"
 @inject IFinancialSummaryService Summary
 @inject IExportService Export
+@inject IFinanceResetService Reset
 @inject IJSRuntime JS
 
-<PageTitle>Lançamentos</PageTitle>
+<PageTitle>Movimentações</PageTitle>
 <div class="fn-page-head">
     <div>
-        <div class="fn-kicker">Resumo calculado</div>
-        <h1>Lançamentos</h1>
+        <div class="fn-kicker">Extrato</div>
+        <h1>Movimentações</h1>
     </div>
     <div class="fn-toolbar">
         <input type="month" class="form-control" value="@MonthInput" @onchange="OnMonthChanged" />
         <button class="btn-ghost" @onclick="ExportExcel">Exportar Excel</button>
+        <button class="btn-ghost" @onclick="() => confirmClear = true">Apagar tudo</button>
+        <button class="btn-fn" @onclick="() => showImport = true">Enviar planilha Excel</button>
     </div>
 </div>
+@if (!string.IsNullOrEmpty(info)) { <div class="alert alert-success">@info</div> }
+
+@if (showImport)
+{
+    <ExcelImportPanel OnImported="AfterImport" />
+}
 
 @if (summary is not null)
 {
@@ -28,27 +38,41 @@
 }
 
 <div class="fn-card">
-    <table class="table fn-table">
-        <thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Categoria</th><th class="text-end">Valor</th></tr></thead>
-        <tbody>
-        @foreach (var item in ledger)
-        {
-            <tr>
-                <td>@Br.Date(item.Date)</td>
-                <td>@item.Kind</td>
-                <td>@item.Description</td>
-                <td>@item.Category</td>
-                <td class="text-end @(item.Amount < 0 ? "neg" : "pos")">@Br.Money(item.Amount)</td>
-            </tr>
-        }
-        </tbody>
-    </table>
+    @if (ledger.Count == 0)
+    {
+        <p class="text-muted mb-0">Nenhuma movimentação neste mês. Clique em <strong>Enviar planilha Excel</strong> ou cadastre em Entradas e Despesas.</p>
+    }
+    else
+    {
+        <table class="table fn-table">
+            <thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Categoria</th><th class="text-end">Valor</th></tr></thead>
+            <tbody>
+            @foreach (var item in ledger)
+            {
+                <tr>
+                    <td>@Br.Date(item.Date)</td>
+                    <td>@item.Kind</td>
+                    <td>@item.Description</td>
+                    <td>@item.Category</td>
+                    <td class="text-end @(item.Amount < 0 ? "neg" : "pos")">@Br.Money(item.Amount)</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
 </div>
+
+<ConfirmDialog @bind-Visible="confirmClear" Title="Apagar movimentações" ConfirmText="Apagar tudo" OnConfirm="ClearAll">
+    Isso remove entradas, despesas, parcelas, cartões, faturas e recorrentes. Categorias permanecem. Não dá para desfazer.
+</ConfirmDialog>
 
 @code {
     private int year = DateTime.Today.Year, month = DateTime.Today.Month;
     private MonthlySummary? summary;
     private IReadOnlyList<LedgerEntryDto> ledger = [];
+    private bool showImport = true;
+    private bool confirmClear;
+    private string? info;
     private string MonthInput => $"{year:0000}-{month:00}";
 
     protected override Task OnInitializedAsync() => Load();
@@ -65,10 +89,22 @@
         await Load();
     }
 
+    private async Task AfterImport(int count)
+    {
+        info = count > 0 ? $"{count} linha(s) gravadas nas movimentações." : null;
+        await Load();
+    }
+
+    private async Task ClearAll()
+    {
+        await Reset.ClearMovementsAsync();
+        info = "Todas as movimentações foram apagadas. Você pode enviar uma planilha nova.";
+        await Load();
+    }
+
     private async Task ExportExcel()
     {
         var bytes = await Export.ExportLedgerExcelAsync(year, month);
-        await JS.InvokeVoidAsync("downloadFile", $"lancamentos-{year}-{month:00}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
+        await JS.InvokeVoidAsync("downloadFile", $"movimentacoes-{year}-{month:00}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
     }
-
 }

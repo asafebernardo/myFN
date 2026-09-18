@@ -1,0 +1,136 @@
+@inject IImportService Import
+
+<div class="fn-card mb-3">
+    <h2 class="h5">Enviar planilha Excel</h2>
+    <p class="text-muted mb-2">Use um arquivo <strong>.xlsx</strong> (Excel). A primeira linha deve ser o cabeçalho. Colunas típicas: Data, Descrição, Valor, Tipo (entrada, despesa, fatura ou crédito).</p>
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <div class="alert alert-danger">@error</div>
+    }
+    @if (!string.IsNullOrEmpty(info))
+    {
+        <div class="alert alert-success">@info</div>
+    }
+    <InputFile OnChange="OnFile" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+    @if (headers.Count > 0)
+    {
+        <div class="row g-2 mt-2">
+            <div class="col-md-6"><label class="form-label">Coluna descrição</label><InputSelect class="form-select" @bind-Value="map.Description">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
+            <div class="col-md-6"><label class="form-label">Coluna valor</label><InputSelect class="form-select" @bind-Value="map.Amount">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
+            <div class="col-md-6"><label class="form-label">Coluna data</label><InputSelect class="form-select" @bind-Value="map.Date">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
+            <div class="col-md-6"><label class="form-label">Coluna tipo</label><InputSelect class="form-select" @bind-Value="map.Type">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
+        </div>
+        <button type="button" class="btn-ghost mt-2" @onclick="Preview">Atualizar prévia</button>
+    }
+    @if (preview.Count > 0)
+    {
+        <table class="table fn-table mt-3">
+            <thead><tr><th>Linha</th><th>Descrição</th><th>Valor</th><th>Alerta</th></tr></thead>
+            <tbody>
+            @foreach (var row in preview.Take(30))
+            {
+                <tr>
+                    <td>@row.Line</td>
+                    <td>@row.Description</td>
+                    <td>@Br.Money(row.Amount)</td>
+                    <td>@(row.PossibleDuplicate ? row.Warning : "")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        @if (preview.Count > 30)
+        {
+            <p class="text-muted">Mostrando 30 de @preview.Count linhas.</p>
+        }
+        <button type="button" class="btn-fn" @onclick="DoImport">Salvar nas movimentações</button>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback<int> OnImported { get; set; }
+
+    private ImportColumnMap map = new();
+    private List<string> headers = [];
+    private List<ImportPreviewRow> preview = [];
+    private byte[]? fileBytes;
+    private string? error;
+    private string? info;
+
+    private async Task OnFile(InputFileChangeEventArgs e)
+    {
+        error = null;
+        info = null;
+        preview = [];
+        headers = [];
+        fileBytes = null;
+
+        var file = e.File;
+        var name = file.Name ?? string.Empty;
+        if (name.EndsWith(".xls", StringComparison.OrdinalIgnoreCase)
+            && !name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+        {
+            error = "O formato antigo .xls não é suportado. No Excel: Arquivo → Salvar como → Pasta de trabalho do Excel (.xlsx).";
+            return;
+        }
+
+        try
+        {
+            using var stream = file.OpenReadStream(20 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            fileBytes = ms.ToArray();
+            using var read = new MemoryStream(fileBytes);
+            headers = (await Import.ReadHeadersAsync(read)).ToList();
+            if (headers.Count == 0)
+            {
+                error = "Não encontrei cabeçalhos na primeira linha da planilha.";
+                return;
+            }
+
+            map.Description = headers.FirstOrDefault(h => h.Contains("desc", StringComparison.OrdinalIgnoreCase)) ?? headers[0];
+            map.Amount = headers.FirstOrDefault(h => ContainsAny(h, "valor", "amount", "vlr")) ?? headers[0];
+            map.Date = headers.FirstOrDefault(h => ContainsAny(h, "data", "date")) ?? headers[0];
+            map.Type = headers.FirstOrDefault(h => ContainsAny(h, "tipo", "type", "lançamento", "lancamento")) ?? headers[0];
+            await Preview();
+        }
+        catch (Exception ex)
+        {
+            error = "Não consegui ler o arquivo. Salve como .xlsx e tente de novo. " + ex.Message;
+        }
+    }
+
+    private async Task Preview()
+    {
+        if (fileBytes is null) return;
+        error = null;
+        using var ms = new MemoryStream(fileBytes);
+        preview = (await Import.PreviewAsync(ms, map)).ToList();
+        if (preview.Count == 0)
+        {
+            error = "Nenhuma linha válida. Confira se a planilha tem descrição, valor e data a partir da linha 2.";
+        }
+    }
+
+    private async Task DoImport()
+    {
+        if (fileBytes is null) return;
+        error = null;
+        try
+        {
+            using var ms = new MemoryStream(fileBytes);
+            var count = await Import.ImportAsync(ms, map);
+            info = count == 0
+                ? "Nenhuma linha nova foi salva (duplicatas ou valor/data inválidos)."
+                : $"{count} movimentação(ões) salvas.";
+            preview = [];
+            await OnImported.InvokeAsync(count);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private static bool ContainsAny(string value, params string[] tokens) =>
+        tokens.Any(token => value.Contains(token, StringComparison.OrdinalIgnoreCase));
+}

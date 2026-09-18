@@ -34,7 +34,12 @@ public sealed class SettingsService(IAppDbContext db, ICurrentUser user) : ISett
         var settings = await db.Settings.FirstOrDefaultAsync(s => s.UserId == user.UserId, ct);
         if (settings is null)
         {
-            settings = new Domain.Entities.AppSetting { Id = Guid.NewGuid(), UserId = user.UserId };
+            settings = new Domain.Entities.AppSetting
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.UserId,
+                SeedVersion = Domain.Entities.AppSetting.CurrentSeedVersion
+            };
             db.Settings.Add(settings);
         }
 

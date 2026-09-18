@@ -10,6 +10,9 @@ public class AppSetting
     public decimal HealthyCommitmentMaxPercent { get; set; } = 70m;
     public decimal WarningCommitmentMaxPercent { get; set; } = 90m;
     public bool ShowDashboardCharts { get; set; } = true;
+    public int SeedVersion { get; set; } = CurrentSeedVersion;
+
+    public const int CurrentSeedVersion = 2;
 
     public User? User { get; set; }
 }

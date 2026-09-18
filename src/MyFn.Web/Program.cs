@@ -37,7 +37,7 @@ builder.Services.AddMyFnApplication();
 var app = builder.Build();
 
 Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "App_Data"));
-await app.Services.InitializeDatabaseAsync(app.Environment.IsDevelopment());
+await app.Services.InitializeDatabaseAsync();
 
 app.UseForwardedHeaders();
 

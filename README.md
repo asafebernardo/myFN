@@ -68,7 +68,7 @@ docker compose up --build
 
 Acesse `http://IP-DA-MAQUINA:5081`. Os dados ficam no volume `myfn-data`.
 
-Em Development o banco SQLite (`src/MyFn.Web/App_Data/myfn.db`) recebe **dados de exemplo** (salário R$ 3.640, obrigatórias, cartões, parcelamentos e fatura Nubank para conferir). Esses registros têm observação `SEED-DEV`. No Docker/Render o ambiente padrão é Production (banco vazio, sem seed).
+Em Development o banco começa **vazio** (só categorias). Envie a planilha em **Movimentações**. No Docker/Render o ambiente padrão é Production.
 
 A tela **Faturas** compara o valor único cobrado no banco com a soma dos gastos no crédito daquele ciclo.
 

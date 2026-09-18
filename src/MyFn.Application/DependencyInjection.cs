@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectionService, ProjectionService>();
         services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<IFinanceResetService, FinanceResetService>();
         return services;
     }
 }

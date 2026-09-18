@@ -51,14 +51,19 @@ public sealed class ImportService(IAppDbContext db, ICurrentUser user) : IImport
     public async Task<int> ImportAsync(Stream excel, ImportColumnMap map, CancellationToken ct = default)
     {
         var rows = await PreviewAsync(excel, map, ct);
-        var defaultExpense = await db.Categories.AsNoTracking()
+        var defaultExpense = await db.Categories
             .Where(c => c.UserId == user.UserId && c.Type == CategoryType.Expense && c.IsActive)
             .Select(c => c.Id)
-            .FirstAsync(ct);
-        var defaultIncome = await db.Categories.AsNoTracking()
+            .FirstOrDefaultAsync(ct);
+        var defaultIncome = await db.Categories
             .Where(c => c.UserId == user.UserId && c.Type == CategoryType.Income && c.IsActive)
             .Select(c => c.Id)
-            .FirstAsync(ct);
+            .FirstOrDefaultAsync(ct);
+
+        if (defaultExpense == Guid.Empty || defaultIncome == Guid.Empty)
+        {
+            throw new InvalidOperationException("Cadastre ao menos uma categoria de entrada e uma de despesa antes de importar.");
+        }
         var cards = await db.CreditCards.AsNoTracking()
             .Where(c => c.UserId == user.UserId && c.IsActive)
             .ToListAsync(ct);

@@ -24,14 +24,12 @@ public static class DependencyInjection
         return services;
     }
 
-    public static async Task InitializeDatabaseAsync(this IServiceProvider services, bool seedDevelopment)
+    public static async Task InitializeDatabaseAsync(this IServiceProvider services)
     {
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
         await db.Database.MigrateAsync();
-        if (seedDevelopment)
-        {
-            await DevelopmentSeed.ApplyAsync(db);
-        }
+        await DevelopmentSeed.EnsureBaselineAsync(db);
+        await DevelopmentSeed.ClearDemoFinanceIfNeededAsync(db);
     }
 }
