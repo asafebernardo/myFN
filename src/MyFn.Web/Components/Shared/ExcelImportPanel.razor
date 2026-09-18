@@ -2,7 +2,7 @@
 
 <div class="fn-card mb-3">
     <h2 class="h5">Enviar planilha Excel</h2>
-    <p class="text-muted mb-2">Use um arquivo <strong>.xlsx</strong> (Excel). A primeira linha deve ser o cabeçalho. Colunas típicas: Data, Descrição, Valor, Tipo (entrada, despesa, fatura ou crédito).</p>
+    <p class="text-muted mb-2">Use um arquivo <strong>.xlsx</strong> (Excel). A primeira linha deve ser o cabeçalho. Extrato do Banco do Brasil (Data, Lançamento, Detalhes, Valor, Tipo Lançamento) é reconhecido: <strong>Entrada</strong> vira receita e <strong>Saída</strong> vira despesa. Saldo anterior é ignorado.</p>
     @if (!string.IsNullOrEmpty(error))
     {
         <div class="alert alert-danger">@error</div>
@@ -18,19 +18,20 @@
             <div class="col-md-6"><label class="form-label">Coluna descrição</label><InputSelect class="form-select" @bind-Value="map.Description">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
             <div class="col-md-6"><label class="form-label">Coluna valor</label><InputSelect class="form-select" @bind-Value="map.Amount">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
             <div class="col-md-6"><label class="form-label">Coluna data</label><InputSelect class="form-select" @bind-Value="map.Date">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
-            <div class="col-md-6"><label class="form-label">Coluna tipo</label><InputSelect class="form-select" @bind-Value="map.Type">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
+            <div class="col-md-6"><label class="form-label">Coluna tipo (Entrada/Saída)</label><InputSelect class="form-select" @bind-Value="map.Type">@foreach (var h in headers) { <option value="@h">@h</option> }</InputSelect></div>
         </div>
         <button type="button" class="btn-ghost mt-2" @onclick="Preview">Atualizar prévia</button>
     }
     @if (preview.Count > 0)
     {
         <table class="table fn-table mt-3">
-            <thead><tr><th>Linha</th><th>Descrição</th><th>Valor</th><th>Alerta</th></tr></thead>
+            <thead><tr><th>Linha</th><th>Tipo</th><th>Descrição</th><th>Valor</th><th>Alerta</th></tr></thead>
             <tbody>
             @foreach (var row in preview.Take(30))
             {
                 <tr>
                     <td>@row.Line</td>
+                    <td>@row.KindLabel</td>
                     <td>@row.Description</td>
                     <td>@Br.Money(row.Amount)</td>
                     <td>@(row.PossibleDuplicate ? row.Warning : "")</td>
@@ -87,10 +88,7 @@
                 return;
             }
 
-            map.Description = headers.FirstOrDefault(h => h.Contains("desc", StringComparison.OrdinalIgnoreCase)) ?? headers[0];
-            map.Amount = headers.FirstOrDefault(h => ContainsAny(h, "valor", "amount", "vlr")) ?? headers[0];
-            map.Date = headers.FirstOrDefault(h => ContainsAny(h, "data", "date")) ?? headers[0];
-            map.Type = headers.FirstOrDefault(h => ContainsAny(h, "tipo", "type", "lançamento", "lancamento")) ?? headers[0];
+            map = SpreadsheetLayout.GuessColumns(headers);
             await Preview();
         }
         catch (Exception ex)
@@ -107,7 +105,7 @@
         preview = (await Import.PreviewAsync(ms, map)).ToList();
         if (preview.Count == 0)
         {
-            error = "Nenhuma linha válida. Confira se a planilha tem descrição, valor e data a partir da linha 2.";
+            error = "Nenhuma linha válida. Confira se a planilha tem descrição, valor e data a partir da linha 2. Saldo anterior e valor zero são ignorados.";
         }
     }
 
@@ -130,7 +128,4 @@
             error = ex.Message;
         }
     }
-
-    private static bool ContainsAny(string value, params string[] tokens) =>
-        tokens.Any(token => value.Contains(token, StringComparison.OrdinalIgnoreCase));
 }

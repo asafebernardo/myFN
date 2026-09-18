@@ -2,6 +2,7 @@ using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using MyFn.Application.Abstractions;
 using MyFn.Application.Contracts;
+using MyFn.Application.Import;
 using MyFn.Application.Services;
 using MyFn.Domain.Common;
 using MyFn.Domain.Entities;
@@ -71,13 +72,7 @@ public sealed class ImportService(IAppDbContext db, ICurrentUser user) : IImport
         var imported = 0;
         foreach (var row in rows.Where(r => !r.PossibleDuplicate && r.Amount > 0 && r.Date.HasValue))
         {
-            var isIncome = ContainsAny(row.Entity, "entrada", "salário", "salario");
-            var isInvoicePayment = ContainsAny(row.Entity, "fatura")
-                                   || ContainsAny(row.Description, "fatura");
-            var isCredit = ContainsAny(row.Entity, "crédito", "credito", "cartão", "cartao")
-                           && !isInvoicePayment;
-
-            if (isIncome)
+            if (row.IsIncome)
             {
                 db.Incomes.Add(new Income
                 {
@@ -92,6 +87,8 @@ public sealed class ImportService(IAppDbContext db, ICurrentUser user) : IImport
             }
             else
             {
+                var isInvoicePayment = row.IsInvoicePayment;
+                var isCredit = row.IsCreditPurchase;
                 var card = MatchCard(cards, row.Description, row.Entity);
                 db.Expenses.Add(new Expense
                 {
@@ -156,9 +153,6 @@ public sealed class ImportService(IAppDbContext db, ICurrentUser user) : IImport
             || (!string.IsNullOrWhiteSpace(c.Bank) && haystack.Contains(c.Bank, StringComparison.OrdinalIgnoreCase)));
     }
 
-    private static bool ContainsAny(string value, params string[] tokens) =>
-        tokens.Any(token => value.Contains(token, StringComparison.OrdinalIgnoreCase));
-
     private static List<ImportPreviewRow> ReadRows(Stream excel, ImportColumnMap map)
     {
         if (excel.CanSeek)
@@ -170,32 +164,32 @@ public sealed class ImportService(IAppDbContext db, ICurrentUser user) : IImport
         var sheet = workbook.Worksheets.First();
         var header = sheet.Row(1).CellsUsed().ToDictionary(c => c.GetString().Trim(), c => c.Address.ColumnNumber, StringComparer.OrdinalIgnoreCase);
 
-        int Col(string name) => header.TryGetValue(name, out var n) ? n : -1;
+        int Col(string name) =>
+            !string.IsNullOrWhiteSpace(name) && header.TryGetValue(name, out var n) ? n : -1;
         var descCol = Col(map.Description);
         var amountCol = Col(map.Amount);
         var dateCol = Col(map.Date);
         var typeCol = Col(map.Type);
+        var detailsCol = Col(map.Details);
 
         var rows = new List<ImportPreviewRow>();
         var last = sheet.LastRowUsed()?.RowNumber() ?? 1;
         for (var r = 2; r <= last; r++)
         {
-            var description = descCol > 0 ? sheet.Cell(r, descCol).GetString().Trim() : string.Empty;
+            var launch = descCol > 0 ? sheet.Cell(r, descCol).GetString().Trim() : string.Empty;
+            var details = detailsCol > 0 ? sheet.Cell(r, detailsCol).GetString().Trim() : string.Empty;
+            var description = SpreadsheetLayout.CombineDescription(launch, details);
             if (string.IsNullOrWhiteSpace(description))
             {
                 continue;
             }
 
-            var amountCell = amountCol > 0 ? sheet.Cell(r, amountCol) : null;
-            decimal amount = 0;
-            if (amountCell is not null && amountCell.TryGetValue(out double raw))
+            var entity = typeCol > 0 ? sheet.Cell(r, typeCol).GetString().Trim() : string.Empty;
+            var signedAmount = ReadAmount(amountCol > 0 ? sheet.Cell(r, amountCol) : null);
+            var classified = SpreadsheetLayout.Classify(description, entity, signedAmount);
+            if (classified.Skip)
             {
-                amount = Money.Round((decimal)raw);
-            }
-            else if (amountCell is not null)
-            {
-                decimal.TryParse(amountCell.GetString(), NumberStyles.Any, new CultureInfo("pt-BR"), out amount);
-                amount = Money.Round(amount);
+                continue;
             }
 
             DateOnly? date = null;
@@ -215,14 +209,34 @@ public sealed class ImportService(IAppDbContext db, ICurrentUser user) : IImport
             rows.Add(new ImportPreviewRow
             {
                 Line = r,
-                Entity = typeCol > 0 ? sheet.Cell(r, typeCol).GetString() : "Despesa",
+                Entity = string.IsNullOrWhiteSpace(entity) ? classified.Label : entity,
                 Description = description,
-                Amount = amount,
-                Date = date
+                Amount = Money.Round(Math.Abs(signedAmount)),
+                Date = date,
+                KindLabel = classified.Label,
+                IsIncome = classified.IsIncome,
+                IsInvoicePayment = classified.IsInvoicePayment,
+                IsCreditPurchase = classified.IsCreditPurchase
             });
         }
 
         return rows;
+    }
+
+    private static decimal ReadAmount(IXLCell? amountCell)
+    {
+        if (amountCell is null)
+        {
+            return 0;
+        }
+
+        if (amountCell.TryGetValue(out double raw))
+        {
+            return Money.Round((decimal)raw);
+        }
+
+        decimal.TryParse(amountCell.GetString(), NumberStyles.Any, new CultureInfo("pt-BR"), out var amount);
+        return Money.Round(amount);
     }
 
     private static bool Same(string a, string b) =>

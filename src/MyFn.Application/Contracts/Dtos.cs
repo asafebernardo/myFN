@@ -197,6 +197,10 @@ public sealed class ImportPreviewRow
     public DateOnly? Date { get; set; }
     public bool PossibleDuplicate { get; set; }
     public string? Warning { get; set; }
+    public string KindLabel { get; set; } = string.Empty;
+    public bool IsIncome { get; set; }
+    public bool IsInvoicePayment { get; set; }
+    public bool IsCreditPurchase { get; set; }
 }
 
 public sealed class ImportColumnMap
@@ -206,6 +210,7 @@ public sealed class ImportColumnMap
     public string Date { get; set; } = "Data";
     public string Category { get; set; } = "Categoria";
     public string Type { get; set; } = "Tipo";
+    public string Details { get; set; } = string.Empty;
 }
 
 public sealed class ReportFilter
