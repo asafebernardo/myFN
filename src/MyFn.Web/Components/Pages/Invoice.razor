@@ -27,18 +27,18 @@ else if (invoice is not null)
         <div class="row g-2 align-items-end">
             <div class="col-md-4">
                 <label class="form-label">Cartão</label>
-                <InputSelect class="form-select" value="@CardId" @onchange="OnCardChanged">
+                <select class="form-select" value="@CardId" @onchange="OnCardChanged">
                     @foreach (var c in cards) { <option value="@c.Id">@c.Name · @c.Bank</option> }
-                </InputSelect>
+                </select>
             </div>
             <div class="col-md-8">
                 <label class="form-label">Ciclo</label>
-                <InputSelect class="form-select" value="@CycleKey" @onchange="OnCycleChanged">
+                <select class="form-select" value="@CycleKey" @onchange="OnCycleChanged">
                     @foreach (var c in invoice.Cycles)
                     {
                         <option value="@c.ClosingDate.ToString("yyyy-MM-dd")">@c.Label</option>
                     }
-                </InputSelect>
+                </select>
             </div>
         </div>
     </div>
