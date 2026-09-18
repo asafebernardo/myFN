@@ -1,0 +1,19 @@
+{
+  "name": "myFN",
+  "image": "mcr.microsoft.com/dotnet/sdk:10.0",
+  "forwardPorts": [5081],
+  "portsAttributes": {
+    "5081": {
+      "label": "myFN",
+      "onAutoForward": "openPreview",
+      "visibility": "public"
+    }
+  },
+  "postCreateCommand": "dotnet restore",
+  "postStartCommand": "dotnet run --project src/MyFn.Web --launch-profile http",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-dotnettools.csharp"]
+    }
+  }
+}

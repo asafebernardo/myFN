@@ -10,7 +10,12 @@ CultureInfo.DefaultThreadCurrentUICulture = culture;
 
 var builder = WebApplication.CreateBuilder(args);
 
-if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"))
+var cloudPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(cloudPort))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{cloudPort}");
+}
+else if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"))
     && string.IsNullOrWhiteSpace(builder.Configuration["Urls"]))
 {
     builder.WebHost.UseUrls("http://0.0.0.0:5081");
