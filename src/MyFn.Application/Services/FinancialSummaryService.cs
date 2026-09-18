@@ -58,7 +58,7 @@ public sealed class FinancialSummaryService(IAppDbContext db, ICurrentUser user)
 
         if (current.Start <= today)
         {
-            foreach (var expense in data.Expenses.Where(e => current.Contains(e.Date)))
+            foreach (var expense in data.Expenses.Where(e => current.Contains(e.Date) && e.Kind != ExpenseKind.InvoicePayment))
             {
                 Add(expense.CategoryId, expense.Amount);
             }
@@ -115,7 +115,7 @@ public sealed class FinancialSummaryService(IAppDbContext db, ICurrentUser user)
             .Select(r => new NamedAmountDto { Name = r.Description, Amount = r.Amount, Detail = "Obrigatória" }));
         if (current.Start <= today)
         {
-            top.AddRange(data.Expenses.Where(e => current.Contains(e.Date))
+            top.AddRange(data.Expenses.Where(e => current.Contains(e.Date) && e.Kind != ExpenseKind.InvoicePayment)
                 .Select(e => new NamedAmountDto { Name = e.Description, Amount = e.Amount, Detail = Labels.Kind(e.Kind) }));
         }
 

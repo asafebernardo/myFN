@@ -192,6 +192,86 @@ public static class DevelopmentSeed
 
         db.InstallmentPurchases.AddRange(pc, phone);
 
+        db.Expenses.AddRange(
+            new Expense
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Description = "iFood",
+                Amount = 54.90m,
+                Date = new DateOnly(2026, 8, 22),
+                CategoryId = food.Id,
+                PaymentMethod = PaymentMethod.CreditCard,
+                Kind = ExpenseKind.CreditCash,
+                CreditCardId = nubank.Id,
+                Notes = "SEED-DEV"
+            },
+            new Expense
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Description = "Uber",
+                Amount = 28.40m,
+                Date = new DateOnly(2026, 8, 29),
+                CategoryId = transport.Id,
+                PaymentMethod = PaymentMethod.CreditCard,
+                Kind = ExpenseKind.CreditCash,
+                CreditCardId = nubank.Id,
+                Notes = "SEED-DEV"
+            },
+            new Expense
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Description = "Farmácia (crédito)",
+                Amount = 67.80m,
+                Date = new DateOnly(2026, 9, 3),
+                CategoryId = health.Id,
+                PaymentMethod = PaymentMethod.CreditCard,
+                Kind = ExpenseKind.CreditCash,
+                CreditCardId = nubank.Id,
+                Notes = "SEED-DEV"
+            },
+            new Expense
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Description = "Mercado no Nubank",
+                Amount = 189.90m,
+                Date = new DateOnly(2026, 9, 6),
+                CategoryId = food.Id,
+                PaymentMethod = PaymentMethod.CreditCard,
+                Kind = ExpenseKind.CreditCash,
+                CreditCardId = nubank.Id,
+                Notes = "SEED-DEV"
+            },
+            new Expense
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Description = "Fatura Nubank",
+                Amount = 950.00m,
+                Date = new DateOnly(2026, 9, 15),
+                CategoryId = otherEx.Id,
+                PaymentMethod = PaymentMethod.Pix,
+                Kind = ExpenseKind.InvoicePayment,
+                CreditCardId = nubank.Id,
+                Notes = "SEED-DEV — valor único cobrado no banco"
+            });
+
+        var nubankClosed = CreditCardCalculator.LastClosedCycle(nubank, new DateOnly(2026, 9, 18));
+        db.CreditCardInvoices.Add(new CreditCardInvoice
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            CreditCardId = nubank.Id,
+            ClosingDate = nubankClosed.ClosingDate,
+            DueDate = nubankClosed.DueDate,
+            CycleStartExclusive = nubankClosed.StartExclusive,
+            StatementAmount = 950.00m,
+            Notes = "SEED-DEV"
+        });
+
         db.PlannedPurchases.AddRange(
             new PlannedPurchase
             {

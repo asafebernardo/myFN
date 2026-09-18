@@ -1,5 +1,6 @@
 @page "/cartoes"
 @inject ICreditCardService CardService
+@inject NavigationManager Nav
 
 <PageTitle>Cartões</PageTitle>
 <div class="fn-page-head">
@@ -24,7 +25,15 @@
                 <div>Limite @Br.Money(card.Limit)</div>
                 <div>Utilizado @Br.Money(card.UsedLimit)</div>
                 <div>Disponível @Br.Money(card.AvailableLimit)</div>
-                <div class="mt-2">Fatura atual @Br.Money(card.CurrentInvoice)</div>
+                <div class="mt-2">Fatura atual (aberta) @Br.Money(card.CurrentInvoice)</div>
+                <div class="mt-2">
+                    Fatura fechada detalhada @Br.Money(card.ClosedInvoiceDetailed)
+                    @if (card.ClosedInvoiceStatement is decimal statement)
+                    {
+                        <span> · banco @Br.Money(statement)</span>
+                    }
+                </div>
+                <div class="mt-1"><StatusBadge Text="@Labels.InvoiceMatch(card.ClosedInvoiceStatus)" Tone="@(card.ClosedInvoiceStatus == InvoiceMatchStatus.Matched ? "ok" : card.ClosedInvoiceStatus == InvoiceMatchStatus.Over ? "bad" : card.ClosedInvoiceStatus == InvoiceMatchStatus.Pending ? "warn" : "neutral")" /></div>
                 <h3 class="h6 mt-3">Próximas faturas</h3>
                 @if (card.UpcomingInvoices.Count == 0)
                 {
@@ -39,6 +48,7 @@
                         }
                     </ul>
                 }
+                <button class="btn btn-sm btn-link" @onclick="() => OpenInvoice(card.Id)">Conferir fatura</button>
                 <button class="btn btn-sm btn-link" @onclick="() => Edit(card)">Editar</button>
                 <button class="btn btn-sm btn-link text-danger" @onclick="() => AskDelete(card)">Excluir</button>
             </div>
@@ -73,6 +83,8 @@
     private List<string> errors = [];
 
     protected override async Task OnInitializedAsync() => items = (await CardService.ListAsync()).ToList();
+
+    private void OpenInvoice(Guid id) => Nav.NavigateTo($"/faturas/{id}");
 
     private void NewItem()
     {

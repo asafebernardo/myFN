@@ -35,15 +35,21 @@ public sealed class ExpenseService(IAppDbContext db, ICurrentUser user, IInstall
                 Kind = e.Kind,
                 CreditCardId = e.CreditCardId,
                 CreditCardName = e.CreditCard != null ? e.CreditCard.Name : null,
-                Notes = e.Notes
+                Notes = e.Notes,
+                IsInvoicePayment = e.Kind == ExpenseKind.InvoicePayment
             })
             .ToListAsync(ct);
     }
 
     public async Task<ExpenseDto> SaveAsync(ExpenseDto dto, CancellationToken ct = default)
     {
+        if (dto.IsInvoicePayment && dto.PaymentMethod == PaymentMethod.CreditCard)
+        {
+            dto.PaymentMethod = PaymentMethod.Pix;
+        }
+
         FinanceValidator.ForMoney(dto.Description, dto.Amount, dto.Date).ThrowIfInvalid();
-        FinanceValidator.ForExpensePayment(dto.PaymentMethod, dto.CreditCardId, 1).ThrowIfInvalid();
+        FinanceValidator.ForExpensePayment(dto.PaymentMethod, dto.CreditCardId, 1, dto.IsInvoicePayment).ThrowIfInvalid();
         if (dto.CategoryId == Guid.Empty)
         {
             throw new FinanceValidationException(["Selecione uma categoria."]);
@@ -64,14 +70,24 @@ public sealed class ExpenseService(IAppDbContext db, ICurrentUser user, IInstall
         entity.Amount = Money.Round(dto.Amount);
         entity.Date = dto.Date;
         entity.CategoryId = dto.CategoryId;
-        entity.PaymentMethod = dto.PaymentMethod;
-        entity.Kind = dto.PaymentMethod == PaymentMethod.CreditCard ? ExpenseKind.CreditCash : ExpenseKind.Debit;
-        entity.CreditCardId = dto.PaymentMethod == PaymentMethod.CreditCard ? dto.CreditCardId : null;
         entity.Notes = dto.Notes;
+        if (dto.IsInvoicePayment)
+        {
+            entity.PaymentMethod = dto.PaymentMethod;
+            entity.Kind = ExpenseKind.InvoicePayment;
+            entity.CreditCardId = dto.CreditCardId;
+        }
+        else
+        {
+            entity.PaymentMethod = dto.PaymentMethod;
+            entity.Kind = dto.PaymentMethod == PaymentMethod.CreditCard ? ExpenseKind.CreditCash : ExpenseKind.Debit;
+            entity.CreditCardId = dto.PaymentMethod == PaymentMethod.CreditCard ? dto.CreditCardId : null;
+        }
 
         await db.SaveChangesAsync(ct);
         dto.Id = entity.Id;
         dto.Kind = entity.Kind;
+        dto.IsInvoicePayment = entity.Kind == ExpenseKind.InvoicePayment;
         return dto;
     }
 
@@ -86,10 +102,38 @@ public sealed class ExpenseService(IAppDbContext db, ICurrentUser user, IInstall
     public async Task<QuickExpenseResult> CreateQuickAsync(QuickExpenseRequest request, CancellationToken ct = default)
     {
         var installmentsCount = request.InstallmentCount <= 0 ? 1 : request.InstallmentCount;
+        if (request.IsInvoicePayment && request.PaymentMethod == PaymentMethod.CreditCard)
+        {
+            request.PaymentMethod = PaymentMethod.Pix;
+        }
+
         FinanceValidator.ForMoney(request.Description, request.Amount, request.Date).ThrowIfInvalid();
-        FinanceValidator.ForExpensePayment(request.PaymentMethod, request.CreditCardId, installmentsCount).ThrowIfInvalid();
+        FinanceValidator.ForExpensePayment(request.PaymentMethod, request.CreditCardId, installmentsCount, request.IsInvoicePayment).ThrowIfInvalid();
 
         var categoryId = request.CategoryId ?? await DefaultExpenseCategoryAsync(ct);
+
+        if (request.IsInvoicePayment)
+        {
+            var savedPayment = await SaveAsync(new ExpenseDto
+            {
+                Description = request.Description,
+                Amount = request.Amount,
+                Date = request.Date,
+                CategoryId = categoryId,
+                PaymentMethod = request.PaymentMethod == PaymentMethod.CreditCard ? PaymentMethod.Pix : request.PaymentMethod,
+                CreditCardId = request.CreditCardId,
+                Notes = request.Notes,
+                IsInvoicePayment = true
+            }, ct);
+
+            return new QuickExpenseResult
+            {
+                CreatedInstallmentPurchase = false,
+                GeneratedInstallments = 0,
+                EntityId = savedPayment.Id,
+                Message = "Pagamento da fatura registrado. Ele não entra como gasto extra: detalhe as compras na tela Faturas."
+            };
+        }
 
         if (request.PaymentMethod == PaymentMethod.CreditCard && installmentsCount > 1)
         {

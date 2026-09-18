@@ -87,6 +87,10 @@ public sealed class ReportService(IAppDbContext db, ICurrentUser user, ICreditCa
         }
 
         var expenses = data.Expenses.Where(e => e.Date >= filter.From && e.Date <= filter.To);
+        if (!filter.ExpenseKind.HasValue)
+        {
+            expenses = expenses.Where(e => e.Kind != ExpenseKind.InvoicePayment);
+        }
         if (filter.CategoryId.HasValue)
         {
             expenses = expenses.Where(e => e.CategoryId == filter.CategoryId);

@@ -6,6 +6,7 @@ using MyFn.Application.Services;
 using MyFn.Domain.Common;
 using MyFn.Domain.Entities;
 using MyFn.Domain.Enums;
+using MyFn.Domain.Finance;
 using System.Globalization;
 using System.Text;
 
@@ -58,13 +59,18 @@ public sealed class ImportService(IAppDbContext db, ICurrentUser user) : IImport
             .Where(c => c.UserId == user.UserId && c.Type == CategoryType.Income && c.IsActive)
             .Select(c => c.Id)
             .FirstAsync(ct);
+        var cards = await db.CreditCards.AsNoTracking()
+            .Where(c => c.UserId == user.UserId && c.IsActive)
+            .ToListAsync(ct);
 
         var imported = 0;
         foreach (var row in rows.Where(r => !r.PossibleDuplicate && r.Amount > 0 && r.Date.HasValue))
         {
-            var isIncome = row.Entity.Contains("entrada", StringComparison.OrdinalIgnoreCase)
-                           || row.Entity.Contains("salário", StringComparison.OrdinalIgnoreCase)
-                           || row.Entity.Contains("salario", StringComparison.OrdinalIgnoreCase);
+            var isIncome = ContainsAny(row.Entity, "entrada", "salário", "salario");
+            var isInvoicePayment = ContainsAny(row.Entity, "fatura")
+                                   || ContainsAny(row.Description, "fatura");
+            var isCredit = ContainsAny(row.Entity, "crédito", "credito", "cartão", "cartao")
+                           && !isInvoicePayment;
 
             if (isIncome)
             {
@@ -81,6 +87,7 @@ public sealed class ImportService(IAppDbContext db, ICurrentUser user) : IImport
             }
             else
             {
+                var card = MatchCard(cards, row.Description, row.Entity);
                 db.Expenses.Add(new Expense
                 {
                     Id = Guid.NewGuid(),
@@ -89,10 +96,18 @@ public sealed class ImportService(IAppDbContext db, ICurrentUser user) : IImport
                     Amount = Money.Round(row.Amount),
                     Date = row.Date!.Value,
                     CategoryId = defaultExpense,
-                    PaymentMethod = PaymentMethod.Pix,
-                    Kind = ExpenseKind.Debit,
+                    PaymentMethod = isCredit ? PaymentMethod.CreditCard : PaymentMethod.Pix,
+                    Kind = isInvoicePayment
+                        ? ExpenseKind.InvoicePayment
+                        : isCredit ? ExpenseKind.CreditCash : ExpenseKind.Debit,
+                    CreditCardId = isInvoicePayment || isCredit ? card?.Id : null,
                     Notes = "Importado de planilha"
                 });
+
+                if (isInvoicePayment && card is not null)
+                {
+                    await UpsertInvoiceStatementAsync(card, row.Date.Value, row.Amount, ct);
+                }
             }
 
             imported++;
@@ -101,6 +116,43 @@ public sealed class ImportService(IAppDbContext db, ICurrentUser user) : IImport
         await db.SaveChangesAsync(ct);
         return imported;
     }
+
+    private async Task UpsertInvoiceStatementAsync(CreditCard card, DateOnly paymentDate, decimal amount, CancellationToken ct)
+    {
+        var cycle = CreditCardCalculator.RecentCycles(card, paymentDate)
+                        .FirstOrDefault(c => paymentDate >= c.ClosingDate && paymentDate <= c.DueDate.AddDays(10))
+                    ?? CreditCardCalculator.LastClosedCycle(card, paymentDate);
+
+        var entity = await db.CreditCardInvoices
+            .FirstOrDefaultAsync(i => i.CreditCardId == card.Id && i.ClosingDate == cycle.ClosingDate, ct);
+        if (entity is null)
+        {
+            entity = new CreditCardInvoice
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.UserId,
+                CreditCardId = card.Id
+            };
+            db.CreditCardInvoices.Add(entity);
+        }
+
+        entity.ClosingDate = cycle.ClosingDate;
+        entity.DueDate = cycle.DueDate;
+        entity.CycleStartExclusive = cycle.StartExclusive;
+        entity.StatementAmount = Money.Round(amount);
+        entity.Notes = "Importado de planilha";
+    }
+
+    private static CreditCard? MatchCard(IEnumerable<CreditCard> cards, string description, string entity)
+    {
+        var haystack = $"{description} {entity}";
+        return cards.FirstOrDefault(c =>
+            (!string.IsNullOrWhiteSpace(c.Name) && haystack.Contains(c.Name, StringComparison.OrdinalIgnoreCase))
+            || (!string.IsNullOrWhiteSpace(c.Bank) && haystack.Contains(c.Bank, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static bool ContainsAny(string value, params string[] tokens) =>
+        tokens.Any(token => value.Contains(token, StringComparison.OrdinalIgnoreCase));
 
     private static List<ImportPreviewRow> ReadRows(Stream excel, ImportColumnMap map)
     {

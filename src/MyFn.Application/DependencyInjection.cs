@@ -12,6 +12,7 @@ public static class DependencyInjection
         services.AddScoped<IExpenseService, ExpenseService>();
         services.AddScoped<IInstallmentService, InstallmentService>();
         services.AddScoped<ICreditCardService, CreditCardService>();
+        services.AddScoped<ICreditInvoiceService, CreditInvoiceService>();
         services.AddScoped<IRecurringExpenseService, RecurringExpenseService>();
         services.AddScoped<IPlannedPurchaseService, PlannedPurchaseService>();
         services.AddScoped<IFinancialSummaryService, FinancialSummaryService>();

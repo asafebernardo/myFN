@@ -17,7 +17,17 @@ public static class Labels
     {
         ExpenseKind.Debit => "Débito",
         ExpenseKind.CreditCash => "Crédito à vista",
+        ExpenseKind.InvoicePayment => "Pagamento de fatura",
         _ => kind.ToString()
+    };
+
+    public static string InvoiceMatch(InvoiceMatchStatus status) => status switch
+    {
+        InvoiceMatchStatus.MissingTarget => "Informe o valor da fatura",
+        InvoiceMatchStatus.Pending => "Falta detalhar",
+        InvoiceMatchStatus.Matched => "Fatura conferida",
+        InvoiceMatchStatus.Over => "Acima da fatura",
+        _ => status.ToString()
     };
 
     public static string Status(InstallmentStatus status) => status switch

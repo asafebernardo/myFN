@@ -16,7 +16,7 @@
         <button class="btn-fn" @onclick="NewItem">+ Nova despesa</button>
     </div>
 </div>
-<p class="text-muted">Compras parceladas não entram aqui: use o formulário rápido com cartão e número de parcelas, ou a tela Parcelamentos.</p>
+<p class="text-muted">Compras parceladas não entram aqui: use o formulário com cartão e número de parcelas, ou a tela Parcelamentos. Para detalhar a fatura do banco, use Faturas.</p>
 @if (errors.Count > 0) { <div class="alert alert-danger">@string.Join(" ", errors)</div> }
 @if (!string.IsNullOrEmpty(info)) { <div class="alert alert-success">@info</div> }
 
@@ -63,7 +63,23 @@
                 <option value="@PaymentMethod.CreditCard">Cartão de crédito</option>
             </InputSelect>
         </div>
-        @if (quick.PaymentMethod == PaymentMethod.CreditCard)
+        <div class="col-12">
+            <label class="form-check">
+                <InputCheckbox class="form-check-input" @bind-Value="quick.IsInvoicePayment" />
+                Este lançamento é o valor único da fatura no banco (não detalha os gastos)
+            </label>
+        </div>
+        @if (quick.IsInvoicePayment)
+        {
+            <div class="col-md-6">
+                <label class="form-label">Cartão da fatura</label>
+                <InputSelect class="form-select" @bind-Value="quick.CreditCardId">
+                    <option value="">Selecione</option>
+                    @foreach (var c in cards) { <option value="@c.Id">@c.Name</option> }
+                </InputSelect>
+            </div>
+        }
+        else if (quick.PaymentMethod == PaymentMethod.CreditCard)
         {
             <div class="col-md-6">
                 <label class="form-label">Cartão</label>
@@ -133,7 +149,8 @@
             CreditCardId = item.CreditCardId,
             Notes = item.Notes,
             InstallmentCount = 1,
-            CurrentInstallment = 1
+            CurrentInstallment = 1,
+            IsInvoicePayment = item.IsInvoicePayment
         };
         open = true;
     }
@@ -155,7 +172,8 @@
                     CategoryId = quick.CategoryId ?? Guid.Empty,
                     PaymentMethod = quick.PaymentMethod,
                     CreditCardId = quick.CreditCardId,
-                    Notes = quick.Notes
+                    Notes = quick.Notes,
+                    IsInvoicePayment = quick.IsInvoicePayment
                 });
                 info = "Despesa atualizada.";
             }

@@ -10,6 +10,7 @@ public interface IAppDbContext
     DbSet<Income> Incomes { get; }
     DbSet<Expense> Expenses { get; }
     DbSet<CreditCard> CreditCards { get; }
+    DbSet<CreditCardInvoice> CreditCardInvoices { get; }
     DbSet<InstallmentPurchase> InstallmentPurchases { get; }
     DbSet<Installment> Installments { get; }
     DbSet<RecurringExpense> RecurringExpenses { get; }

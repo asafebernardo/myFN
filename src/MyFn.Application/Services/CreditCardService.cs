@@ -26,8 +26,11 @@ public sealed class CreditCardService(IAppDbContext db, ICurrentUser user) : ICr
             .Where(c => c.UserId == user.UserId)
             .OrderBy(c => c.Name)
             .ToListAsync(ct);
+        var invoices = await db.CreditCardInvoices.AsNoTracking()
+            .Where(i => i.UserId == user.UserId)
+            .ToListAsync(ct);
 
-        return cards.Select(card => Map(card, data, today)).ToList();
+        return cards.Select(card => Map(card, data, invoices, today)).ToList();
     }
 
     public async Task<CreditCardDto> SaveAsync(CreditCardDto dto, CancellationToken ct = default)
@@ -75,10 +78,13 @@ public sealed class CreditCardService(IAppDbContext db, ICurrentUser user) : ICr
         await db.SaveChangesAsync(ct);
     }
 
-    private static CreditCardDto Map(CreditCard card, FinanceData data, DateOnly today)
+    private static CreditCardDto Map(CreditCard card, FinanceData data, IReadOnlyList<CreditCardInvoice> invoices, DateOnly today)
     {
         var used = CreditCardCalculator.UsedLimit(card, data.Installments, data.Expenses, today);
         var currentInvoice = CreditCardCalculator.CurrentInvoice(card, data.Installments, data.Expenses, today);
+        var closed = CreditCardCalculator.LastClosedCycle(card, today);
+        var statement = invoices.FirstOrDefault(i => i.CreditCardId == card.Id && i.ClosingDate == closed.ClosingDate)?.StatementAmount;
+        var recon = InvoiceReconciler.Reconcile(card, closed, statement, data.Expenses, data.Installments, null, data.Recurring);
 
         var upcoming = data.Installments
             .Where(i => i.Purchase?.CreditCardId == card.Id && i.Status != InstallmentStatus.Cancelled)
@@ -106,6 +112,10 @@ public sealed class CreditCardService(IAppDbContext db, ICurrentUser user) : ICr
             UsedLimit = used,
             AvailableLimit = CreditCardCalculator.AvailableLimit(card.Limit, used),
             CurrentInvoice = currentInvoice,
+            ClosedInvoiceStatement = recon.StatementAmount,
+            ClosedInvoiceDetailed = recon.DetailedAmount,
+            ClosedInvoiceRemaining = recon.Remaining,
+            ClosedInvoiceStatus = recon.Status,
             UpcomingInvoices = upcoming
         };
     }

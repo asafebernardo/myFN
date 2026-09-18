@@ -32,7 +32,7 @@
     <div class="col-lg-6">
         <div class="fn-card">
             <h2 class="h5">Importar planilha (.xlsx)</h2>
-            <p class="text-muted">A importação não apaga dados existentes. Duplicatas (descrição + valor + data) são ignoradas.</p>
+            <p class="text-muted">A importação não apaga dados existentes. Duplicatas (descrição + valor + data) são ignoradas. Linhas de fatura (tipo ou descrição contendo “fatura”) viram pagamento de cartão, sem duplicar o gasto; o detalhe das compras fica em Faturas.</p>
             <InputFile OnChange="OnFile" accept=".xlsx" />
             @if (headers.Count > 0)
             {

@@ -39,6 +39,7 @@ public sealed class ExpenseDto
     public Guid? CreditCardId { get; set; }
     public string? CreditCardName { get; set; }
     public string? Notes { get; set; }
+    public bool IsInvoicePayment { get; set; }
 }
 
 public sealed class CreditCardDto
@@ -53,6 +54,10 @@ public sealed class CreditCardDto
     public decimal UsedLimit { get; set; }
     public decimal AvailableLimit { get; set; }
     public decimal CurrentInvoice { get; set; }
+    public decimal? ClosedInvoiceStatement { get; set; }
+    public decimal ClosedInvoiceDetailed { get; set; }
+    public decimal ClosedInvoiceRemaining { get; set; }
+    public InvoiceMatchStatus ClosedInvoiceStatus { get; set; }
     public IReadOnlyList<InvoiceMonthDto> UpcomingInvoices { get; set; } = [];
 }
 
@@ -149,6 +154,7 @@ public sealed class QuickExpenseRequest
     public int CurrentInstallment { get; set; } = 1;
     public DateOnly? FirstInstallmentDate { get; set; }
     public string? Notes { get; set; }
+    public bool IsInvoicePayment { get; set; }
 }
 
 public sealed class QuickExpenseResult
@@ -232,3 +238,41 @@ public sealed class LedgerEntryDto
     public decimal Amount { get; set; }
     public string Category { get; set; } = string.Empty;
 }
+
+public sealed class BillingCycleDto
+{
+    public DateOnly ClosingDate { get; set; }
+    public DateOnly DueDate { get; set; }
+    public DateOnly CycleStartExclusive { get; set; }
+    public bool IsCurrent { get; set; }
+    public string Label { get; set; } = string.Empty;
+}
+
+public sealed class InvoiceItemDto
+{
+    public string Source { get; set; } = string.Empty;
+    public Guid SourceId { get; set; }
+    public DateOnly Date { get; set; }
+    public string Kind { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public string Category { get; set; } = string.Empty;
+}
+
+public sealed class CreditInvoiceDto
+{
+    public Guid? Id { get; set; }
+    public Guid CreditCardId { get; set; }
+    public string CardName { get; set; } = string.Empty;
+    public string Bank { get; set; } = string.Empty;
+    public DateOnly ClosingDate { get; set; }
+    public DateOnly DueDate { get; set; }
+    public DateOnly CycleStartExclusive { get; set; }
+    public decimal? StatementAmount { get; set; }
+    public decimal DetailedAmount { get; set; }
+    public decimal Remaining { get; set; }
+    public InvoiceMatchStatus Status { get; set; }
+    public IReadOnlyList<InvoiceItemDto> Items { get; set; } = [];
+    public IReadOnlyList<BillingCycleDto> Cycles { get; set; } = [];
+}
+

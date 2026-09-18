@@ -12,7 +12,9 @@ dotnet ef database update --project src/MyFn.Infrastructure --startup-project sr
 dotnet run --project src/MyFn.Web
 ```
 
-Em Development o banco SQLite (`src/MyFn.Web/App_Data/myfn.db`) recebe **dados de exemplo** (salário R$ 3.640, obrigatórias, cartões e parcelamentos). Esses registros têm observação `SEED-DEV`.
+Em Development o banco SQLite (`src/MyFn.Web/App_Data/myfn.db`) recebe **dados de exemplo** (salário R$ 3.640, obrigatórias, cartões, parcelamentos e fatura Nubank para conferir). Esses registros têm observação `SEED-DEV`.
+
+A tela **Faturas** compara o valor único cobrado no banco com a soma dos gastos no crédito daquele ciclo.
 
 ## Testes
 

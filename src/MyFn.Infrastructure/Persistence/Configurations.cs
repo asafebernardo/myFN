@@ -74,6 +74,20 @@ internal sealed class CreditCardConfig : IEntityTypeConfiguration<CreditCard>
     }
 }
 
+internal sealed class CreditCardInvoiceConfig : IEntityTypeConfiguration<CreditCardInvoice>
+{
+    public void Configure(EntityTypeBuilder<CreditCardInvoice> builder)
+    {
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.StatementAmount).Money();
+        builder.Property(x => x.Notes).HasMaxLength(500);
+        builder.HasIndex(x => new { x.CreditCardId, x.ClosingDate }).IsUnique();
+        builder.HasIndex(x => x.UserId);
+        builder.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+        builder.HasOne(x => x.CreditCard).WithMany(x => x.Invoices).HasForeignKey(x => x.CreditCardId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
 internal sealed class InstallmentPurchaseConfig : IEntityTypeConfiguration<InstallmentPurchase>
 {
     public void Configure(EntityTypeBuilder<InstallmentPurchase> builder)

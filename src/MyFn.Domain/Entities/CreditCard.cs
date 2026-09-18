@@ -14,4 +14,5 @@ public class CreditCard
     public User? User { get; set; }
     public ICollection<InstallmentPurchase> Purchases { get; set; } = new List<InstallmentPurchase>();
     public ICollection<Expense> Expenses { get; set; } = new List<Expense>();
+    public ICollection<CreditCardInvoice> Invoices { get; set; } = new List<CreditCardInvoice>();
 }

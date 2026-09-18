@@ -46,8 +46,8 @@ public class InstallmentServiceTests
             InstallmentCount = 12,
             CurrentInstallment = 2,
             CreditCardId = card.Id,
-            PurchaseDate = new DateOnly(2026, 8, 12),
-            FirstInstallmentDate = new DateOnly(2026, 8, 17)
+            PurchaseDate = new DateOnly(2026, 10, 12),
+            FirstInstallmentDate = new DateOnly(2026, 10, 17)
         });
 
         Assert.Equal(12, created.Installments.Count);

@@ -38,6 +38,41 @@ public static class CreditCardCalculator
         return new BillingCycle(cycleStartExclusive, cycleEnd, due);
     }
 
+    public static BillingCycle CycleEndingOn(CreditCard card, DateOnly closingDate)
+    {
+        var previous = closingDate.AddMonths(-1);
+        var startExclusive = SafeDay(previous.Year, previous.Month, card.ClosingDay);
+        var due = SafeDay(closingDate.Year, closingDate.Month, card.DueDay);
+        if (due <= closingDate)
+        {
+            var nextDue = closingDate.AddMonths(1);
+            due = SafeDay(nextDue.Year, nextDue.Month, card.DueDay);
+        }
+
+        return new BillingCycle(startExclusive, closingDate, due);
+    }
+
+    public static BillingCycle LastClosedCycle(CreditCard card, DateOnly today)
+    {
+        var current = CurrentCycle(card, today);
+        return CycleEndingOn(card, current.StartExclusive);
+    }
+
+    public static IReadOnlyList<BillingCycle> RecentCycles(CreditCard card, DateOnly today, int count = 8)
+    {
+        var current = CurrentCycle(card, today);
+        var cycles = new List<BillingCycle>(count) { current };
+        var closing = current.StartExclusive;
+        for (var i = 1; i < count; i++)
+        {
+            var cycle = CycleEndingOn(card, closing);
+            cycles.Add(cycle);
+            closing = cycle.StartExclusive;
+        }
+
+        return cycles;
+    }
+
     public static decimal UsedLimit(
         CreditCard card,
         IEnumerable<Installment> installments,
@@ -67,18 +102,7 @@ public static class CreditCardCalculator
         DateOnly today)
     {
         var cycle = CurrentCycle(card, today);
-        var parcels = installments
-            .Where(i => i.Purchase?.CreditCardId == card.Id)
-            .Where(i => i.Status != InstallmentStatus.Cancelled)
-            .Where(i => i.DueDate > cycle.StartExclusive && i.DueDate <= cycle.DueDate)
-            .Sum(i => i.Amount);
-
-        var cash = cashCreditExpenses
-            .Where(e => e.CreditCardId == card.Id && e.Kind == ExpenseKind.CreditCash)
-            .Where(e => e.Date > cycle.StartExclusive && e.Date <= cycle.ClosingDate)
-            .Sum(e => e.Amount);
-
-        return Money.Round(parcels + cash);
+        return InvoiceReconciler.Reconcile(card, cycle, null, cashCreditExpenses, installments).DetailedAmount;
     }
 
     private static DateOnly SafeDay(int year, int month, int day)

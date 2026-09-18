@@ -27,6 +27,7 @@ Renderização: **Blazor Interactive Server** em toda a UI (CRUD rápido, filtro
 - **Income** — entradas (salário, freelance…). Recorrente projeta meses futuros.
 - **Expense** — despesas realizadas à vista (débito/PIX/dinheiro ou crédito à vista). **Não** representa compra parcelada.
 - **CreditCard** — limite, fechamento, vencimento.
+- **CreditCardInvoice** — valor cobrado no banco em um ciclo (meta para conferir os gastos detalhados).
 - **InstallmentPurchase** — compra parcelada (valor total, N parcelas, parcela atual, cartão).
 - **Installment** — cada parcela gerada (número, valor, vencimento, status).
 - **RecurringExpense** — impacto mensal enquanto ativa; `IsMandatory` marca despesas obrigatórias.
@@ -44,8 +45,9 @@ User 1──* Income, Expense, CreditCard, InstallmentPurchase,
 
 Category 1──* Income, Expense, RecurringExpense, PlannedPurchase, InstallmentPurchase
 
-CreditCard 1──* Expense (crédito à vista)
+CreditCard 1──* Expense (crédito à vista ou pagamento de fatura)
 CreditCard 1──* InstallmentPurchase
+CreditCard 1──* CreditCardInvoice
 CreditCard 1──* RecurringExpense (opcional)
 
 InstallmentPurchase 1──* Installment
@@ -98,4 +100,5 @@ tests/MyFn.Tests
 8. Compras planejadas
 9. Relatórios
 10. Importação xlsx + exportação
+11. Fatura do cartão: meta do banco + gastos detalhados até bater o valor
 11. Testes e UI responsiva

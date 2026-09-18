@@ -80,6 +80,20 @@ Campos livres em `RecurringExpense` (`WhatIsIt`, `Prdv` como texto). PRDV não e
 
 Importar **não apaga** dados. Duplicata candidata = mesma descrição (trim, case-insensitive) + mesmo valor + mesma data, por usuário.
 
+Linha com tipo/descrição contendo “fatura” vira `ExpenseKind.InvoicePayment` (saída da conta para pagar o cartão). Esse lançamento **não** entra em débitos do dashboard. Se o texto bater com o nome/banco do cartão, o valor vira a meta da fatura fechada.
+
 ## 11. Autenticação
 
 Não há login nesta versão. `ICurrentUser` devolve o usuário seed. Trocar a implementação dessa interface (e adicionar ASP.NET Identity) é o ponto de extensão.
+
+## 12. Fatura do cartão vs lançamento do banco
+
+O extrato do banco costuma trazer **um único valor** (“Fatura Nubank”). Isso não detalha iFood, Uber, mercado etc.
+
+**Decisão:**
+- O valor único do banco é a **meta da fatura** (`CreditCardInvoice.StatementAmount`) e, se lançado, `InvoicePayment`.
+- Os gastos reais são `Expense` crédito à vista, parcelas do ciclo e recorrentes no cartão.
+- A tela **Faturas** soma esses detalhes até bater com a meta (faltou / conferida / passou).
+- Pagamento de fatura não conta como despesa extra. Não lance a fatura como débito comum e também os gastos no crédito.
+
+Como alterar: se a regra passar a ser “caixa” (só conta quando a fatura é paga), deixar de somar crédito à vista/parcelas no mês da compra e somar só o `InvoicePayment`.

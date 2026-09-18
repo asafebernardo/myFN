@@ -17,7 +17,16 @@ public enum PaymentMethod
 public enum ExpenseKind
 {
     Debit = 1,
-    CreditCash = 2
+    CreditCash = 2,
+    InvoicePayment = 3
+}
+
+public enum InvoiceMatchStatus
+{
+    MissingTarget = 1,
+    Pending = 2,
+    Matched = 3,
+    Over = 4
 }
 
 public enum InstallmentStatus

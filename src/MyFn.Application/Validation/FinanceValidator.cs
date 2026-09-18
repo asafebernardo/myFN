@@ -77,9 +77,19 @@ public static class FinanceValidator
         return result;
     }
 
-    public static ValidationResult ForExpensePayment(PaymentMethod method, Guid? creditCardId, int installmentCount)
+    public static ValidationResult ForExpensePayment(PaymentMethod method, Guid? creditCardId, int installmentCount, bool invoicePayment = false)
     {
         var result = new ValidationResult();
+        if (invoicePayment)
+        {
+            result.Ensure(creditCardId.HasValue && creditCardId.Value != Guid.Empty,
+                "Selecione o cartão cuja fatura foi cobrada no banco.");
+            result.Ensure(installmentCount <= 1, "Pagamento de fatura não é parcelado.");
+            result.Ensure(method != PaymentMethod.CreditCard,
+                "O pagamento da fatura sai da conta (PIX, débito ou dinheiro), não do próprio crédito.");
+            return result;
+        }
+
         if (method == PaymentMethod.CreditCard || installmentCount > 1)
         {
             result.Ensure(creditCardId.HasValue && creditCardId.Value != Guid.Empty,
@@ -87,6 +97,13 @@ public static class FinanceValidator
         }
 
         result.Ensure(installmentCount >= 1, "O número de parcelas deve ser maior que zero.");
+        return result;
+    }
+
+    public static ValidationResult ForInvoiceStatement(decimal amount)
+    {
+        var result = new ValidationResult();
+        result.Ensure(amount > 0, "Informe o valor cobrado no banco (deve ser positivo).");
         return result;
     }
 

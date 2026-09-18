@@ -239,6 +239,23 @@ html, body {
     display: none;
 }
 
+.fn-progress {
+    height: 10px;
+    background: #e8eee9;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.fn-progress > span {
+    display: block;
+    height: 100%;
+    background: var(--fn-accent);
+}
+
+.fn-progress.ok > span { background: var(--fn-ok); }
+.fn-progress.warn > span { background: var(--fn-warn); }
+.fn-progress.bad > span { background: var(--fn-bad); }
+
 #blazor-error-ui {
     display: none;
 }

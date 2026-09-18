@@ -1,0 +1,256 @@
+@page "/faturas"
+@page "/faturas/{CardId:guid}"
+@inject ICreditInvoiceService Invoices
+@inject ICreditCardService Cards
+@inject IExpenseService Expenses
+@inject ICategoryService Categories
+@inject NavigationManager Nav
+
+<PageTitle>Faturas</PageTitle>
+<div class="fn-page-head">
+    <div>
+        <div class="fn-kicker">Cartão de crédito</div>
+        <h1>Conferir fatura</h1>
+    </div>
+</div>
+<p class="text-muted">O banco lança um valor único. Cadastre aqui cada gasto no crédito até a soma bater com esse valor. O pagamento da fatura não entra de novo como despesa do mês.</p>
+@if (errors.Count > 0) { <div class="alert alert-danger">@string.Join(" ", errors)</div> }
+@if (!string.IsNullOrEmpty(info)) { <div class="alert alert-success">@info</div> }
+
+@if (cards.Count == 0)
+{
+    <div class="fn-card">Cadastre um cartão em Cartões antes de conferir a fatura.</div>
+}
+else if (invoice is not null)
+{
+    <div class="fn-card mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Cartão</label>
+                <InputSelect class="form-select" value="@CardId" @onchange="OnCardChanged">
+                    @foreach (var c in cards) { <option value="@c.Id">@c.Name · @c.Bank</option> }
+                </InputSelect>
+            </div>
+            <div class="col-md-8">
+                <label class="form-label">Ciclo</label>
+                <InputSelect class="form-select" value="@CycleKey" @onchange="OnCycleChanged">
+                    @foreach (var c in invoice.Cycles)
+                    {
+                        <option value="@c.ClosingDate.ToString("yyyy-MM-dd")">@c.Label</option>
+                    }
+                </InputSelect>
+            </div>
+        </div>
+    </div>
+
+    var tone = Tone(invoice.Status);
+    var percent = invoice.StatementAmount is decimal target && target > 0
+        ? Math.Min(100m, Math.Round(invoice.DetailedAmount / target * 100m, 1))
+        : 0m;
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="fn-card @tone"><div class="fn-kicker">Valor no banco</div><div class="fn-metric">@(invoice.StatementAmount is decimal s ? Br.Money(s) : "—")</div></div></div>
+        <div class="col-md-3"><div class="fn-card @tone"><div class="fn-kicker">Já detalhado</div><div class="fn-metric">@Br.Money(invoice.DetailedAmount)</div></div></div>
+        <div class="col-md-3">
+            <div class="fn-card @tone">
+                <div class="fn-kicker">@(invoice.Status == InvoiceMatchStatus.Over ? "Passou" : "Falta")</div>
+                <div class="fn-metric">@Br.Money(Math.Abs(invoice.Remaining))</div>
+            </div>
+        </div>
+        <div class="col-md-3"><div class="fn-card @tone"><div class="fn-kicker">Situação</div><div class="fn-metric" style="font-size:1rem">@Labels.InvoiceMatch(invoice.Status)</div></div></div>
+    </div>
+
+    <div class="fn-card mb-3">
+        <div class="fn-progress @tone mb-2"><span style="width:@percent.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></span></div>
+        <small class="text-muted">@Br.Percent(percent) da fatura já tem compra correspondente.</small>
+        <div class="row g-2 align-items-end mt-3">
+            <div class="col-md-4">
+                <label class="form-label">Valor cobrado no banco / fatura</label>
+                <InputNumber class="form-control" @bind-Value="statementAmount" />
+            </div>
+            <div class="col-md-3">
+                <button class="btn-fn" @onclick="SaveStatement">Usar este valor como meta</button>
+            </div>
+        </div>
+        <p class="text-muted small mb-0 mt-2">Ciclo @Br.Date(invoice.CycleStartExclusive.AddDays(1)) a @Br.Date(invoice.ClosingDate), vencimento @Br.Date(invoice.DueDate).</p>
+    </div>
+
+    <div class="fn-card">
+        <div class="d-flex justify-content-between flex-wrap gap-2 mb-2">
+            <h2 class="h5 mb-0">Gastos neste ciclo</h2>
+            <button class="btn-fn" @onclick="NewCharge">+ Gasto no crédito</button>
+        </div>
+        @if (invoice.Items.Count == 0)
+        {
+            <p class="text-muted mb-0">Nenhum gasto neste ciclo. Lance compras à vista ou parcelas para ir preenchendo a fatura.</p>
+        }
+        else
+        {
+            <table class="table fn-table">
+                <thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Categoria</th><th class="text-end">Valor</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var item in invoice.Items)
+                {
+                    <tr>
+                        <td>@Br.Date(item.Date)</td>
+                        <td>@item.Kind</td>
+                        <td>@item.Description</td>
+                        <td>@item.Category</td>
+                        <td class="text-end">@Br.Money(item.Amount)</td>
+                        <td class="text-end">
+                            @if (item.Source == "Cash")
+                            {
+                                <button class="btn btn-sm btn-link text-danger" @onclick="() => AskDelete(item)">Excluir</button>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="4">Total detalhado</th>
+                        <th class="text-end">@Br.Money(invoice.DetailedAmount)</th>
+                        <th></th>
+                    </tr>
+                </tfoot>
+            </table>
+        }
+    </div>
+}
+
+<ModalFrame @bind-Visible="open" Title="Gasto no crédito">
+    <div class="row g-2">
+        <div class="col-12"><label class="form-label">Descrição</label><InputText class="form-control" @bind-Value="quick.Description" /></div>
+        <div class="col-md-6"><label class="form-label">Valor</label><InputNumber class="form-control" @bind-Value="quick.Amount" /></div>
+        <div class="col-md-6"><label class="form-label">Data da compra</label><InputDate class="form-control" @bind-Value="quick.Date" /></div>
+        <div class="col-md-6">
+            <label class="form-label">Categoria</label>
+            <InputSelect class="form-select" @bind-Value="quick.CategoryId">
+                @foreach (var c in cats) { <option value="@c.Id">@c.Name</option> }
+            </InputSelect>
+        </div>
+        <div class="col-md-3"><label class="form-label">Parcelas</label><InputNumber class="form-control" @bind-Value="quick.InstallmentCount" /></div>
+        <div class="col-md-3"><label class="form-label">Parcela atual</label><InputNumber class="form-control" @bind-Value="quick.CurrentInstallment" /></div>
+        <div class="col-12"><label class="form-label">Observação</label><InputTextArea class="form-control" @bind-Value="quick.Notes" /></div>
+    </div>
+    <div class="d-flex justify-content-end gap-2 mt-3">
+        <button type="button" class="btn-ghost" @onclick="() => open = false">Cancelar</button>
+        <button type="button" class="btn-fn" @onclick="SaveCharge">Salvar</button>
+    </div>
+</ModalFrame>
+
+<ConfirmDialog @bind-Visible="confirm" Title="Excluir gasto" ConfirmText="Excluir" OnConfirm="DeleteCharge">
+    Excluir "@pending?.Description"?
+</ConfirmDialog>
+
+@code {
+    [Parameter] public Guid CardId { get; set; }
+
+    private List<CreditCardDto> cards = [];
+    private List<CategoryDto> cats = [];
+    private CreditInvoiceDto? invoice;
+    private decimal statementAmount;
+    private QuickExpenseRequest quick = new();
+    private InvoiceItemDto? pending;
+    private bool open, confirm;
+    private List<string> errors = [];
+    private string? info;
+    private string CycleKey => invoice?.ClosingDate.ToString("yyyy-MM-dd") ?? "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        cards = (await Cards.ListAsync()).Where(c => c.IsActive).ToList();
+        cats = (await Categories.ListAsync(CategoryType.Expense, true)).ToList();
+        if (cards.Count == 0) return;
+        if (CardId == Guid.Empty) CardId = cards[0].Id;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        errors.Clear();
+        invoice = await Invoices.GetAsync(CardId, invoice?.ClosingDate);
+        statementAmount = invoice.StatementAmount ?? 0m;
+    }
+
+    private async Task OnCardChanged(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var id))
+        {
+            invoice = null;
+            Nav.NavigateTo($"/faturas/{id}");
+        }
+    }
+
+    private async Task OnCycleChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var closing))
+        {
+            invoice = await Invoices.GetAsync(CardId, closing);
+            statementAmount = invoice.StatementAmount ?? 0m;
+        }
+    }
+
+    private async Task SaveStatement()
+    {
+        errors.Clear();
+        info = null;
+        try
+        {
+            invoice = await Invoices.SaveStatementAsync(CardId, invoice!.ClosingDate, statementAmount);
+            info = "Valor da fatura salvo. Agora some os gastos até bater esse total.";
+        }
+        catch (FinanceValidationException ex) { errors = ex.Errors.ToList(); }
+    }
+
+    private void NewCharge()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var inCycle = invoice is not null && today > invoice.CycleStartExclusive && today <= invoice.ClosingDate;
+        quick = new QuickExpenseRequest
+        {
+            Date = inCycle ? today : invoice?.ClosingDate ?? today,
+            PaymentMethod = PaymentMethod.CreditCard,
+            CreditCardId = CardId,
+            InstallmentCount = 1,
+            CurrentInstallment = 1,
+            FirstInstallmentDate = invoice?.DueDate,
+            CategoryId = cats.FirstOrDefault()?.Id
+        };
+        open = true;
+    }
+
+    private async Task SaveCharge()
+    {
+        errors.Clear();
+        info = null;
+        try
+        {
+            quick.PaymentMethod = PaymentMethod.CreditCard;
+            quick.CreditCardId = CardId;
+            var result = await Expenses.CreateQuickAsync(quick);
+            info = result.Message;
+            open = false;
+            await Load();
+        }
+        catch (FinanceValidationException ex) { errors = ex.Errors.ToList(); }
+    }
+
+    private void AskDelete(InvoiceItemDto item) { pending = item; confirm = true; }
+
+    private async Task DeleteCharge()
+    {
+        if (pending is null || pending.Source != "Cash") return;
+        await Expenses.DeleteAsync(pending.SourceId);
+        pending = null;
+        await Load();
+    }
+
+    private static string Tone(InvoiceMatchStatus status) => status switch
+    {
+        InvoiceMatchStatus.Matched => "ok",
+        InvoiceMatchStatus.Over => "bad",
+        InvoiceMatchStatus.Pending => "warn",
+        _ => ""
+    };
+}

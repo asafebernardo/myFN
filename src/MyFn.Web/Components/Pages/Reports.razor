@@ -38,6 +38,7 @@
                 <option value="">Todos</option>
                 <option value="Debit">Débito</option>
                 <option value="CreditCash">Crédito à vista</option>
+                <option value="InvoicePayment">Pagamento de fatura</option>
             </InputSelect>
         </div>
         <div class="col-md-3">
@@ -144,7 +145,7 @@
 
     private async Task Load()
     {
-        filter.ExpenseKind = kindFilter switch { "Debit" => ExpenseKind.Debit, "CreditCash" => ExpenseKind.CreditCash, _ => null };
+        filter.ExpenseKind = kindFilter switch { "Debit" => ExpenseKind.Debit, "CreditCash" => ExpenseKind.CreditCash, "InvoicePayment" => ExpenseKind.InvoicePayment, _ => null };
         filter.InstallmentStatus = statusFilter switch
         {
             "Open" => InstallmentStatus.Open,

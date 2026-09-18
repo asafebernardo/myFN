@@ -200,3 +200,82 @@ public class CreditCardAndAffordabilityTests
         Assert.Equal(1580m, result.BalanceAfter);
     }
 }
+
+public class InvoiceReconcilerTests
+{
+    [Fact]
+    public void Soma_compras_ate_bater_o_valor_da_fatura()
+    {
+        var card = new CreditCard { Id = Guid.NewGuid(), ClosingDay = 8, DueDay = 15 };
+        var cycle = new BillingCycle(new DateOnly(2026, 8, 8), new DateOnly(2026, 9, 8), new DateOnly(2026, 9, 15));
+        var expenses = new[]
+        {
+            Cash(card.Id, "iFood", 54.90m, new DateOnly(2026, 8, 22)),
+            Cash(card.Id, "Uber", 28.40m, new DateOnly(2026, 8, 29)),
+            Cash(card.Id, "Mercado", 166.70m, new DateOnly(2026, 9, 6))
+        };
+
+        var pending = InvoiceReconciler.Reconcile(card, cycle, 250m, expenses, []);
+        Assert.Equal(250m, pending.StatementAmount);
+        Assert.Equal(250m, pending.DetailedAmount);
+        Assert.Equal(0m, pending.Remaining);
+        Assert.Equal(InvoiceMatchStatus.Matched, pending.Status);
+    }
+
+    [Fact]
+    public void Mostra_quanto_falta_para_chegar_no_valor_do_banco()
+    {
+        var card = new CreditCard { Id = Guid.NewGuid(), ClosingDay = 8, DueDay = 15 };
+        var cycle = new BillingCycle(new DateOnly(2026, 8, 8), new DateOnly(2026, 9, 8), new DateOnly(2026, 9, 15));
+        var expenses = new[]
+        {
+            Cash(card.Id, "iFood", 80m, new DateOnly(2026, 8, 22))
+        };
+
+        var recon = InvoiceReconciler.Reconcile(card, cycle, 120m, expenses, []);
+        Assert.Equal(InvoiceMatchStatus.Pending, recon.Status);
+        Assert.Equal(40m, recon.Remaining);
+        Assert.Equal(80m, recon.DetailedAmount);
+    }
+
+    [Fact]
+    public void Detecta_quando_o_detalhe_passa_da_fatura()
+    {
+        var card = new CreditCard { Id = Guid.NewGuid(), ClosingDay = 8, DueDay = 15 };
+        var cycle = new BillingCycle(new DateOnly(2026, 8, 8), new DateOnly(2026, 9, 8), new DateOnly(2026, 9, 15));
+        var expenses = new[]
+        {
+            Cash(card.Id, "Mercado", 200m, new DateOnly(2026, 9, 1))
+        };
+
+        var recon = InvoiceReconciler.Reconcile(card, cycle, 150m, expenses, []);
+        Assert.Equal(InvoiceMatchStatus.Over, recon.Status);
+        Assert.Equal(-50m, recon.Remaining);
+    }
+
+    [Fact]
+    public void Pagamento_de_fatura_nao_entra_como_debito_do_mes()
+    {
+        var month = new FinancialMonth(2026, 9, 1);
+        var today = new DateOnly(2026, 9, 18);
+        var cardId = Guid.NewGuid();
+        var expenses = new[]
+        {
+            new Expense { Amount = 950m, Date = new DateOnly(2026, 9, 15), Kind = ExpenseKind.InvoicePayment, CreditCardId = cardId },
+            new Expense { Amount = 80m, Date = new DateOnly(2026, 9, 6), Kind = ExpenseKind.CreditCash, CreditCardId = cardId }
+        };
+        var summary = LedgerAssembler.Assemble(month, [], expenses, [], [], 3640m, 70, 90, today);
+        Assert.Equal(0m, summary.Debits);
+        Assert.Equal(80m, summary.CashCredit);
+    }
+
+    private static Expense Cash(Guid cardId, string description, decimal amount, DateOnly date) => new()
+    {
+        Id = Guid.NewGuid(),
+        Description = description,
+        Amount = amount,
+        Date = date,
+        Kind = ExpenseKind.CreditCash,
+        CreditCardId = cardId
+    };
+}
