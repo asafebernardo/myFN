@@ -1,0 +1,16 @@
+services:
+  myfn:
+    build: .
+    image: myfn:local
+    container_name: myfn
+    ports:
+      - "5081:5081"
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:5081
+      ASPNETCORE_ENVIRONMENT: Production
+    volumes:
+      - myfn-data:/app/App_Data
+    restart: unless-stopped
+
+volumes:
+  myfn-data:

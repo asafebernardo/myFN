@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+**/.git/
+**/.vs/
+**/TestResults/
+**/App_Data/*.db
+**/App_Data/*.db-*
+**/*.user
+**/.DS_Store
